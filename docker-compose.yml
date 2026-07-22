@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: file:/data/monitor.db
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
+      AUTH_DISABLED: "true"
+      NEXT_PUBLIC_AUTH_DISABLED: "true"
+      SQLITE_PATH: /data/monitor.db
+    volumes:
+      - monitor_data:/data
+    command: ["sh", "-c", "pnpm db:init && pnpm start"]
+
+volumes:
+  monitor_data:

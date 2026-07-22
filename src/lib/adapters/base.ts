@@ -1,0 +1,167 @@
+/**
+ * 上游适配器接口定义
+ * 所有上游类型（SUB2API / NEW_API 等）都需实现此接口
+ * 新增上游类型只需实现此接口，无需改动采集器和 UI
+ */
+import type { UpstreamType } from '@/lib/domain-types';
+
+/** 适配器运行所需的上下文 */
+export interface AdapterContext {
+  /** 上游基础 URL（不含协议，如 relay.example.com） */
+  baseUrl: string;
+  /** 已解密的 API Key（sk-xxx），用于测速/延迟测试 */
+  apiKey: string;
+  /** new-api 系统访问令牌（用于查余额，sub2api 不需要） */
+  accessToken?: string;
+  /** new-api 用户 ID（配合 accessToken 使用） */
+  userId?: string;
+  /** 测试超时（毫秒） */
+  timeoutMs: number;
+  /** 测速模型名 */
+  testModel: string;
+  /** 当前 Token 所属分组，用于计算分组价格 */
+  groupName?: string;
+}
+
+/** 余额查询结果 */
+export interface BalanceResult {
+  ok: boolean;
+  /** false 表示该类上游没有余额接口，不应计为采集错误 */
+  supported?: boolean;
+  /** 剩余余额（美元） */
+  balance?: number;
+  /** 额度上限（美元），可选 */
+  limit?: number;
+  /** 已用额度（美元），可选 */
+  used?: number;
+  /** 原始模式（quota_limited / unrestricted），可选 */
+  mode?: string;
+  /** 从上游响应自动提取的真实分组名（sub2api=planName, new-api=data.group） */
+  groupName?: string;
+  usageStats?: ModelUsageStats[];
+  errorMessage?: string;
+}
+
+export interface ModelUsageStats {
+  modelName: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  accountCost?: number;
+  actualCost: number;
+}
+
+/** API Key 远端元数据（名称、分组及分组展示信息） */
+export interface KeyMetadataResult {
+  ok: boolean;
+  keyName?: string;
+  groupName?: string;
+  groupDescription?: string;
+  groupRateMultiplier?: number;
+  remoteKeyId?: string;
+  errorMessage?: string;
+}
+
+/** 延迟测试结果 */
+export interface LatencyResult {
+  ok: boolean;
+  /** HTTP 响应延迟（毫秒） */
+  latencyMs?: number;
+  /** 可用模型数量，可选 */
+  modelCount?: number;
+  errorMessage?: string;
+}
+
+/** 模型实测结果 */
+export interface ModelTestResult {
+  ok: boolean;
+  /** 总延迟（毫秒） */
+  latencyMs?: number;
+  /** 返回内容片段 */
+  content?: string;
+  errorMessage?: string;
+}
+
+/** 流式测速结果 */
+export interface StreamTestResult {
+  ok: boolean;
+  /** 首 token 延迟（TTFB，毫秒） */
+  firstTokenLatMs?: number;
+  /** 总耗时（毫秒） */
+  totalMs?: number;
+  /** 生成的 token 数 */
+  tokenCount?: number;
+  /** 每秒 token 数 */
+  tps?: number;
+  errorMessage?: string;
+}
+
+export interface PriceItem {
+  modelName: string;
+  currency: string;
+  inputPrice?: number;
+  outputPrice?: number;
+  cacheReadPrice?: number;
+  cacheWritePrice?: number;
+  fixedPrice?: number;
+  rawData?: Record<string, unknown>;
+}
+
+export interface PricingResult {
+  ok: boolean;
+  prices?: PriceItem[];
+  errorMessage?: string;
+}
+
+/** 上游适配器接口 */
+export interface UpstreamAdapter {
+  /** 上游类型标识 */
+  readonly type: UpstreamType;
+
+  /** 查询余额（轻量，不消耗额度） */
+  queryBalance(ctx: AdapterContext): Promise<BalanceResult>;
+
+  /** 延迟测试（轻量，GET 模型列表） */
+  testLatency(ctx: AdapterContext): Promise<LatencyResult>;
+
+  /** 模型实测（重量，消耗少量额度） */
+  testModel(ctx: AdapterContext, model: string): Promise<ModelTestResult>;
+
+  /** 流式测速（重量，消耗少量额度） */
+  testStream(ctx: AdapterContext, model: string): Promise<StreamTestResult>;
+
+  /** 拉取可用模型列表（轻量，不消耗额度） */
+  listModels(ctx: AdapterContext): Promise<{ ok: boolean; models?: string[]; errorMessage?: string }>;
+
+  /** 拉取 API Key 的远端名称、分组和分组展示信息（按需调用） */
+  fetchKeyMetadata?(ctx: AdapterContext): Promise<KeyMetadataResult>;
+
+  /** 获取模型价格；没有结构化价格接口的上游可不实现。 */
+  queryPricing?(ctx: AdapterContext): Promise<PricingResult>;
+}
+
+/** 辅助：构造规范的 base URL（带协议） */
+export function buildBaseUrl(raw: string): string {
+  let url = raw.trim();
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  // 去掉末尾斜杠
+  return url.replace(/\/+$/, '');
+}
+
+/** 辅助：带超时的 fetch */
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
