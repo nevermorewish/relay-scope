@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
-  KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog,
+  KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog, Plus, Pencil,
 } from 'lucide-react';
 import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -21,12 +21,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
-import { StatusBadge, StatusDot } from '@/components/StatusBadge';
+import { StatusBadge } from '@/components/StatusBadge';
+import { AddUpstreamGroupDialog } from '@/components/add-upstream-group-dialog';
 import { useConfirm } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { formatGroupMultiplier, getKeyDisplayName, getKeyGroupLabel } from '@/lib/key-display';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
 import { resolvedIncidentLabel } from '@/lib/incident-semantics';
@@ -51,6 +51,7 @@ interface UpstreamKey {
   lastError: string | null;
   hasApiKey: boolean;
   hasAccessToken: boolean;
+  userId: string | null;
   enabled: boolean;
   testModel: string | null;
   monitoredModels: Array<{
@@ -115,7 +116,8 @@ export default function UpstreamDetailPage() {
   const [testingModelId, setTestingModelId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [refreshingKeyId, setRefreshingKeyId] = useState<number | null>(null);
+  const [groupEditor, setGroupEditor] = useState<UpstreamKey | null | undefined>(undefined);
+  const [deletingKeyId, setDeletingKeyId] = useState<number | null>(null);
   const baseRequestSequence = useRef(0);
   const metricRequestSequence = useRef(0);
   const actionInFlight = useRef(false);
@@ -144,6 +146,11 @@ export default function UpstreamDetailPage() {
       if (!iRes.ok) throw new Error(nextIncidents.error || '获取告警历史失败');
       if (!isCurrent()) return false;
       setUpstream(nextUpstream);
+      setSelectedKeyId((current) => {
+        const nextKeys = Array.isArray(nextUpstream.keys) ? nextUpstream.keys : [];
+        if (current && nextKeys.some((key: UpstreamKey) => String(key.id) === current)) return current;
+        return nextKeys[0]?.id != null ? String(nextKeys[0].id) : '';
+      });
       setIncidents(Array.isArray(nextIncidents) ? nextIncidents : []);
       return true;
     } finally {
@@ -292,21 +299,27 @@ export default function UpstreamDetailPage() {
     }
   }
 
-  async function handleRefreshMetadata(key: UpstreamKey) {
-    setRefreshingKeyId(key.id);
+  async function handleDeleteGroup(key: UpstreamKey) {
+    if (!upstream || deletingKeyId != null) return;
+    const ok = await confirm({
+      title: `删除分组「${key.group}」？`,
+      description: '该分组的监测模型、历史指标和关联数据将一并删除，不可恢复。',
+      destructive: true,
+      confirmText: '删除',
+    });
+    if (!ok) return;
+
+    setDeletingKeyId(key.id);
     try {
-      const res = await fetch(`/api/keys/${key.id}/metadata`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || '远端信息获取失败');
-        return;
-      }
-      toast.success('远端信息已更新');
+      const response = await fetch(`/api/upstreams/${upstream.id}/keys/${key.id}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || '删除分组失败');
+      toast.success(`已删除分组 ${key.group}`);
       await fetchBase();
-    } catch (e) {
-      toast.error('请求失败: ' + (e as Error).message);
+    } catch (deleteError) {
+      toast.error((deleteError as Error).message);
     } finally {
-      setRefreshingKeyId(null);
+      setDeletingKeyId(null);
     }
   }
 
@@ -365,6 +378,19 @@ export default function UpstreamDetailPage() {
   return (
     <div className="space-y-6">
       {confirmDialog}
+      {groupEditor !== undefined ? (
+        <AddUpstreamGroupDialog
+          upstreamId={upstream.id}
+          upstreamType={upstream.type}
+          baseUrl={upstream.baseUrl}
+          keyData={groupEditor}
+          onClose={() => setGroupEditor(undefined)}
+          onSaved={() => {
+            setGroupEditor(undefined);
+            void fetchBase().catch((error) => toast.error((error as Error).message));
+          }}
+        />
+      ) : null}
       {/* ====== 面包屑 ====== */}
       <Breadcrumb>
         <BreadcrumbList>
@@ -383,7 +409,6 @@ export default function UpstreamDetailPage() {
         icon={ServerCog}
         title={upstream.name}
         description={upstream.baseUrl}
-        leading={<StatusDot status={upstream.status} size="lg" />}
         meta={
           <>
             <StatusBadge status={upstream.status} />
@@ -443,10 +468,16 @@ export default function UpstreamDetailPage() {
 
         {/* ---- 分组详情 ---- */}
         <TabsContent value="groups" className="space-y-3">
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => setGroupEditor(null)}>
+              <Plus data-icon="inline-start" />
+              添加分组
+            </Button>
+          </div>
           {keys.length === 0 ? (
             <Card>
               <CardContent className="p-10 text-center text-muted-foreground">
-                该上游暂无分组，请到上游管理中添加分组密钥
+                该上游暂无分组，请点击上方“添加分组”完成配置
               </CardContent>
             </Card>
           ) : (
@@ -456,10 +487,11 @@ export default function UpstreamDetailPage() {
                   key={k.id}
                   k={k}
                   upstreamType={upstream.type}
-                  refreshing={refreshingKeyId === k.id}
                   testingModelId={testingModelId}
                   testDisabled={testing || refreshing || testingModelId != null}
-                  onRefresh={handleRefreshMetadata}
+                  deleting={deletingKeyId === k.id}
+                  onEdit={() => setGroupEditor(k)}
+                  onDelete={() => void handleDeleteGroup(k)}
                   onTestModel={handleTestModel}
                 />
               ))}
@@ -482,9 +514,7 @@ export default function UpstreamDetailPage() {
                     <SelectGroup>
                       {keys.map((k) => (
                         <SelectItem key={k.id} value={String(k.id)}>
-                          {upstream.type === 'NEW_API'
-                            ? `${getKeyDisplayName(k)} · ${getKeyGroupLabel(k)}`
-                            : k.group}
+                          {k.group}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -694,13 +724,14 @@ function SummaryCard({ icon, label, value, tone }: {
   );
 }
 
-function GroupCard({ k, upstreamType, refreshing, testingModelId, testDisabled, onRefresh, onTestModel }: {
+function GroupCard({ k, upstreamType, testingModelId, testDisabled, deleting, onEdit, onDelete, onTestModel }: {
   k: UpstreamKey;
   upstreamType: string;
-  refreshing: boolean;
   testingModelId: number | null;
   testDisabled: boolean;
-  onRefresh: (key: UpstreamKey) => void;
+  deleting: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
   onTestModel: (keyId: number, modelId: number, modelName: string) => void;
 }) {
   return (
@@ -708,7 +739,7 @@ function GroupCard({ k, upstreamType, refreshing, testingModelId, testDisabled, 
       <CardHeader className="flex-row items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <div className="min-w-0">
-            <CardTitle className="truncate text-base" title={getKeyDisplayName(k)}>
+            <CardTitle className="truncate text-base" title={k.group}>
               {k.group}
             </CardTitle>
             {k.label && k.label !== k.group ? (
@@ -717,48 +748,30 @@ function GroupCard({ k, upstreamType, refreshing, testingModelId, testDisabled, 
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {upstreamType === 'NEW_API' ? (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              aria-label="重新获取远端信息"
-              title="重新获取远端信息"
-              disabled={refreshing}
-              onClick={() => onRefresh(k)}
-            >
-              <RefreshCw data-icon="inline-start" className={refreshing ? 'animate-spin' : undefined} />
-            </Button>
-          ) : null}
+          <Button size="sm" variant="ghost" onClick={onEdit}>
+            <Pencil data-icon="inline-start" />
+            编辑
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="text-destructive"
+            disabled={deleting}
+            aria-label={`删除分组 ${k.group}`}
+            title={`删除分组 ${k.group}`}
+            onClick={onDelete}
+          >
+            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+          </Button>
           <StatusBadge status={k.status} />
         </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-3">
-        {upstreamType === 'NEW_API' ? (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <div>
-              <dt className="text-xs text-muted-foreground">秘钥名称</dt>
-              <dd className="mt-0.5 break-words">{k.keyName || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">分组名称</dt>
-              <dd className="mt-0.5 break-words">{getKeyGroupLabel(k)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">分组说明</dt>
-              <dd className="mt-0.5 break-words">{k.groupDescription || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">倍率</dt>
-              <dd className="mt-0.5">{formatGroupMultiplier(k.groupRateMultiplier)}</dd>
-            </div>
-          </dl>
-        ) : null}
-
         <div className="grid grid-cols-2 gap-3 border-y py-3">
           <div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Timer className="h-3 w-3" />延迟
+              <Timer className="h-3 w-3" />最近检测延迟
             </div>
             <div className="mt-0.5 font-mono text-sm font-semibold">
               {k.lastLatencyMs != null ? `${k.lastLatencyMs}ms` : '—'}
@@ -801,7 +814,7 @@ function GroupCard({ k, upstreamType, refreshing, testingModelId, testDisabled, 
           ) : null}
           {upstreamType === 'NEW_API' ? (
             k.hasAccessToken
-              ? <Badge variant="secondary" className="gap-1"><Check className="h-3 w-3" />令牌</Badge>
+              ? null
               : <Badge variant="outline" className="gap-1 text-warning"><AlertTriangle className="h-3 w-3" />无令牌</Badge>
           ) : null}
           {!k.enabled ? <Badge variant="secondary">监测已暂停</Badge> : null}

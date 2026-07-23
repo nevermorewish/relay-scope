@@ -7,7 +7,7 @@
 - 在一个面板中管理多个 AI API 中转站及其 Key/分组。
 - 用轻量检查覆盖日常可用性，用低频重量测试验证真实生成能力。
 - 将上游差异限制在适配器层，保持采集、告警和界面逻辑稳定。
-- 不向浏览器返回上游凭证明文或数据库中的加密值。
+- 常规 API 不向浏览器返回上游凭证明文或数据库中的加密值；只有本机显式点击小眼睛时才通过专用端点返回单个凭证。
 - 支持单机自托管，并保留扩展新适配器和通知渠道的边界。
 
 ## 系统上下文
@@ -21,7 +21,7 @@ flowchart LR
   App -->|"告警与恢复通知"| Feishu["飞书 Webhook"]
 ```
 
-Next.js 同时承载界面、API Route 和服务端业务逻辑。SQLite 是单机持久化数据源；定时调度由应用外部触发，应用负责决定本轮执行轻量还是重量采集。
+Next.js 14.2.35 同时承载界面、API Route 和服务端业务逻辑。SQLite 是单机持久化数据源；本地运行时由应用内调度器每分钟触发，也可由外部 Cron 调用鉴权端点。应用负责决定本轮执行轻量还是重量采集。
 
 ## 模块边界
 
@@ -34,6 +34,7 @@ Next.js 同时承载界面、API Route 和服务端业务逻辑。SQLite 是单�
 | Alert Engine | 按 Key 评估规则、执行冷却、创建或自动恢复事件 |
 | Notification Channel | 将告警和恢复事件发送到已启用渠道 |
 | Prisma | 数据访问、关系约束和级联清理 |
+| Local Backup | 手动生成 SQLite 一致性快照并保留对应 `.env.local` |
 
 ## 核心数据模型
 
@@ -108,7 +109,7 @@ sequenceDiagram
   participant API as /api/cron/collect
   participant Collector as Collector
   participant Adapter as Upstream Adapter
-  participant DB as PostgreSQL
+  participant DB as SQLite
   participant Alert as Alert Engine
 
   Cron->>API: GET + Bearer CRON_SECRET
@@ -171,6 +172,7 @@ interface UpstreamAdapter {
 
 - API Key 用于 Token 用量、模型列表和 Chat Completions。
 - Access Token 与用户 ID 用于 `/api/user/self`、Token 搜索和用户分组配置。
+- Access Token 与用户 ID 按站点账户共享；新增分组未显式提供时，服务端直接继承本站已有的加密值，不向前端回传明文。
 - `/api/user/self` 的用户分组不能替代 Token 的真实分组。
 - 元数据同步允许部分成功：已经获取到的名称或分组可以保存，失败信息单独记录，旧值不会被无条件清空。
 
@@ -206,6 +208,7 @@ interface UpstreamAdapter {
 ## 安全边界
 
 - API Key 与 Access Token 使用 AES-256-GCM 加密，密钥由 `APP_ENCRYPTION_KEY` 通过 scrypt 派生。
+- `pnpm db:backup` 仅手动执行，使用 SQLite `VACUUM INTO` 生成一致性快照，并将 `.env.local` 一并保存到 Git 忽略的敏感备份目录。
 - 管理员密码只保存 bcrypt 哈希。
 - 会话 JWT 通过 HttpOnly、SameSite Cookie 传递；生产模式下 Cookie 标记为 Secure。
 - 面向浏览器的 Key DTO 移除密文，只暴露是否已配置凭证。
@@ -238,3 +241,6 @@ interface UpstreamAdapter {
 - 应用进程不内置可靠的分布式调度器，生产环境应使用系统 cron 或外部调度平台。
 - 多实例部署时，外部调度器只应触发一个入口，避免重复采集和重复告警。
 - 删除上游属于破坏性操作，生产操作前应确保数据库备份可恢复。
+## 动态价格观测
+
+对支持用户日志接口的 New API 聚合站，采集器在重量测试轮次读取 `/api/log/self`，从当前 Token、模型和实际渠道最近一条消费日志中的 `model_ratio`、`completion_ratio`、缓存倍率与分组倍率还原实际路由价格。价格快照只有在发生变化或超过 24 小时未刷新时才写入 SQLite。余额接口返回的累计 Token 与 `actual_cost` 可作为另一条模型级倍率校验依据；观测值不会覆盖分组配置倍率，并在总览中优先于公开价格目录展示。价格变化达到 5% 会创建 `PRICE_CHANGED` 事件，这类事件需要用户确认，不会因为下一次连通检查成功而自动恢复。

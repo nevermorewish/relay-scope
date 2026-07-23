@@ -18,14 +18,14 @@ import {
   type UpstreamTableQuery,
   type UpstreamTableSorting,
 } from '@/components/upstreams-data-table';
-import type { MonitoredModelRow, UpstreamKeyRow, UpstreamRow } from '@/components/upstreams-columns';
+import type { UpstreamKeyRow, UpstreamRow } from '@/components/upstreams-columns';
+import { AddUpstreamGroupDialog } from '@/components/add-upstream-group-dialog';
 import { buildUpstreamListSearchParams } from '@/lib/upstream-query';
 import { PageHeader } from '@/components/page-header';
 import { getOfficialModelPrice } from '@/lib/official-model-prices';
 
 type UpstreamKey = UpstreamKeyRow;
 type Upstream = UpstreamRow;
-const MASKED_API_KEY = '********************';
 
 interface EditableModel {
   clientId: string;
@@ -141,19 +141,6 @@ function draftGroupRequest(draft: DraftGroup) {
         enabled: model.enabled,
       })),
   };
-}
-
-function initialEditableModels(key: UpstreamKey | null): EditableModel[] {
-  if (key?.monitoredModels?.length) {
-    return key.monitoredModels.map((model: MonitoredModelRow) => ({
-      clientId: `saved-${model.id}`,
-      modelName: model.modelName,
-      officialInputPrice: model.officialInputPrice == null ? '' : String(model.officialInputPrice),
-      officialOutputPrice: model.officialOutputPrice == null ? '' : String(model.officialOutputPrice),
-      enabled: model.enabled,
-    }));
-  }
-  return key?.testModel ? [{ ...emptyEditableModel(), modelName: key.testModel }] : [];
 }
 
 function formatKeyModels(key: UpstreamKey) {
@@ -505,10 +492,11 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         {upstream && keyEditor ? (
-          <KeyFormDialog
+          <AddUpstreamGroupDialog
             embedded
             upstreamId={upstream.id}
             upstreamType={type}
+            baseUrl={baseUrl}
             keyData={keyEditor.key}
             onClose={onClose}
             onSaved={onSaved}
@@ -891,304 +879,5 @@ function KeyManager({ upstreamId, type, onEditKey }: {
         </div>
       )}
     </div>
-  );
-}
-
-// ============ 单个 Key 表单 ============
-function KeyFormDialog({ upstreamId, upstreamType, keyData, onClose, onSaved, embedded = false }: {
-  upstreamId: number; upstreamType: string; keyData: UpstreamKey | null;
-  onClose: () => void; onSaved: () => void; embedded?: boolean;
-}) {
-  const [group, setGroup] = useState(keyData?.group || '');
-  const [label, setLabel] = useState(keyData?.label || '');
-  const [apiKey, setApiKey] = useState('');
-  const [apiKeyDirty, setApiKeyDirty] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [revealingApiKey, setRevealingApiKey] = useState(false);
-  const [accessToken, setAccessToken] = useState('');
-  const [accessTokenDirty, setAccessTokenDirty] = useState(false);
-  const [showAccessToken, setShowAccessToken] = useState(false);
-  const [revealingAccessToken, setRevealingAccessToken] = useState(false);
-  const [userId, setUserId] = useState(keyData?.userId || '');
-  const [groupRateMultiplier, setGroupRateMultiplier] = useState(keyData?.groupRateMultiplier == null ? '' : String(keyData.groupRateMultiplier));
-  const [models, setModels] = useState<EditableModel[]>(() => initialEditableModels(keyData));
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(''); setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        group,
-        label,
-        userId,
-        monitoredModels: models.map((model) => ({
-          modelName: model.modelName,
-          officialInputPrice: model.officialInputPrice === '' ? null : Number(model.officialInputPrice),
-          officialOutputPrice: model.officialOutputPrice === '' ? null : Number(model.officialOutputPrice),
-          enabled: model.enabled,
-        })),
-        groupRateMultiplier: groupRateMultiplier === '' ? null : Number(groupRateMultiplier),
-      };
-      if ((!keyData || apiKeyDirty) && apiKey) body.apiKey = apiKey;
-      if ((!keyData || accessTokenDirty) && accessToken) body.accessToken = accessToken;
-      const url = keyData ? `/api/upstreams/${upstreamId}/keys/${keyData.id}` : `/api/upstreams/${upstreamId}/keys`;
-      const method = keyData ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!res.ok) { const d = await res.json(); setError(d.error || '保存失败'); return; }
-      toast.success(keyData ? '分组已更新' : '分组已创建');
-      onSaved();
-    } catch (e) { setError('保存失败: ' + (e as Error).message); }
-    finally { setSaving(false); }
-  }
-
-  async function loadModels() {
-    setLoadingModels(true);
-    try {
-      const suffix = keyData ? `?keyId=${keyData.id}` : '';
-      const res = await fetch(`/api/upstreams/${upstreamId}/models${suffix}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '读取模型失败');
-      const models = Array.isArray(data.models) ? data.models.filter((item: unknown): item is string => typeof item === 'string') : [];
-      setAvailableModels(models);
-      toast.success(`已读取 ${models.length} 个可用模型`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setLoadingModels(false);
-    }
-  }
-
-  async function toggleApiKeyVisibility() {
-    if (showApiKey) {
-      setShowApiKey(false);
-      if (!apiKeyDirty) setApiKey('');
-      return;
-    }
-    if (!keyData?.hasApiKey || apiKeyDirty) {
-      setShowApiKey(true);
-      return;
-    }
-
-    setRevealingApiKey(true);
-    try {
-      const res = await fetch(`/api/upstreams/${upstreamId}/keys/${keyData.id}/secret`, { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '读取 API Key 失败');
-      setApiKey(data.apiKey);
-      setShowApiKey(true);
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setRevealingApiKey(false);
-    }
-  }
-
-  async function toggleAccessTokenVisibility() {
-    if (showAccessToken) {
-      setShowAccessToken(false);
-      if (!accessTokenDirty) setAccessToken('');
-      return;
-    }
-    if (!keyData?.hasAccessToken || accessTokenDirty) {
-      setShowAccessToken(true);
-      return;
-    }
-
-    setRevealingAccessToken(true);
-    try {
-      const res = await fetch(
-        `/api/upstreams/${upstreamId}/keys/${keyData.id}/secret?field=accessToken`,
-        { cache: 'no-store' },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '读取 AccessToken 失败');
-      setAccessToken(data.accessToken);
-      setShowAccessToken(true);
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setRevealingAccessToken(false);
-    }
-  }
-
-  function addModel() {
-    setModels((current) => [...current, emptyEditableModel()]);
-  }
-
-  function updateModel(clientId: string, patch: Partial<EditableModel>) {
-    setModels((current) => current.map((model) => model.clientId === clientId ? { ...model, ...patch } : model));
-  }
-
-  function updateModelName(clientId: string, modelName: string) {
-    const catalog = getOfficialModelPrice(modelName);
-    setModels((current) => current.map((model) => {
-      if (model.clientId !== clientId) return model;
-      const previousCatalog = getOfficialModelPrice(model.modelName);
-      return {
-        ...model,
-        modelName,
-        officialInputPrice: catalog ? String(catalog.input) : previousCatalog ? '' : model.officialInputPrice,
-        officialOutputPrice: catalog ? String(catalog.output) : previousCatalog ? '' : model.officialOutputPrice,
-      };
-    }));
-  }
-
-  const content = (
-    <>
-        <DialogHeader>
-          <DialogTitle>{keyData ? `编辑分组 - ${keyData.group}` : '添加分组'}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>分组名</Label>
-              <Input value={group} onChange={(e) => setGroup(e.target.value)} placeholder="default" required />
-              <p className="text-xs text-muted-foreground">用于区分同一站点中的不同 Key 或套餐</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>标签</Label>
-              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="备注" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>倍率（可选）</Label>
-              <Input type="number" min="0" step="any" value={groupRateMultiplier} onChange={(e) => setGroupRateMultiplier(e.target.value)} placeholder="如 0.8" />
-              <p className="text-xs text-muted-foreground">站点未提供倍率接口时可手工填写</p>
-            </div>
-          </div>
-          <div className="space-y-2 rounded-md border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><Label>监测模型</Label><p className="text-xs text-muted-foreground">自动测试会轮换这些模型，每个分组每轮只生成一次</p></div>
-              <div className="flex gap-1">
-                <Button type="button" size="sm" variant="ghost" onClick={loadModels} disabled={loadingModels}><RefreshCw data-icon="inline-start" className={loadingModels ? 'animate-spin' : undefined} />{loadingModels ? '读取中…' : '读取模型'}</Button>
-                <Button type="button" size="sm" variant="outline" onClick={addModel}><Plus data-icon="inline-start" />添加模型</Button>
-              </div>
-            </div>
-            <datalist id="available-upstream-models">{availableModels.map((model) => <option key={model} value={model} />)}</datalist>
-            {models.length === 0 ? <div className="py-4 text-center text-xs text-muted-foreground">尚未添加监测模型</div> : (
-              <div className="space-y-2">{models.map((model) => (
-                <div key={model.clientId} className="grid gap-2 rounded-md bg-muted/30 p-2 sm:grid-cols-[minmax(160px,1fr)_110px_110px_auto_auto] sm:items-end">
-                  <div className="space-y-1"><Label className="text-xs">模型名称</Label><Input list="available-upstream-models" value={model.modelName} onChange={(e) => updateModelName(model.clientId, e.target.value)} placeholder="gpt-5.6-sol" /></div>
-                  <div className="space-y-1"><Label className="text-xs">官方输入价</Label><Input type="number" min="0" step="any" value={model.officialInputPrice} onChange={(e) => updateModel(model.clientId, { officialInputPrice: e.target.value })} placeholder="USD / 1M" /></div>
-                  <div className="space-y-1"><Label className="text-xs">官方输出价</Label><Input type="number" min="0" step="any" value={model.officialOutputPrice} onChange={(e) => updateModel(model.clientId, { officialOutputPrice: e.target.value })} placeholder="USD / 1M" /></div>
-                  <div className="flex h-9 items-center gap-2"><Switch checked={model.enabled} onCheckedChange={(enabled) => updateModel(model.clientId, { enabled })} aria-label={`监测 ${model.modelName || '模型'}`} /><span className="text-xs">监测</span></div>
-                  <Button type="button" size="icon-sm" variant="ghost" className="text-destructive" aria-label="移除模型" title="移除模型" onClick={() => setModels((current) => current.filter((item) => item.clientId !== model.clientId))}><Trash2 /></Button>
-                </div>
-              ))}</div>
-            )}
-          </div>
-          {upstreamType === 'NEW_API' && keyData && (
-            <div className="rounded-md border p-3 text-sm">
-              <div className="mb-2 font-medium">远端信息</div>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-                <div>
-                  <dt className="text-muted-foreground">秘钥名称</dt>
-                  <dd className="mt-0.5 break-words">{keyData.keyName || '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">分组名称</dt>
-                  <dd className="mt-0.5 break-words">{getKeyGroupLabel(keyData)}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">分组说明</dt>
-                  <dd className="mt-0.5 break-words">{keyData.groupDescription || '—'}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">倍率</dt>
-                  <dd className="mt-0.5">{formatGroupMultiplier(keyData.groupRateMultiplier)}</dd>
-                </div>
-              </dl>
-              {keyData.metadataError && (
-                <p className="mt-2 text-xs text-destructive">{keyData.metadataError}</p>
-              )}
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <Label>API Key {keyData?.hasApiKey && <span className="text-xs text-muted-foreground">（留空保持不变）</span>}</Label>
-            <div className="relative">
-              <Input
-                type={showApiKey || (keyData?.hasApiKey && !apiKeyDirty) ? 'text' : 'password'}
-                className="pr-10 font-mono text-xs"
-                value={keyData?.hasApiKey && !apiKeyDirty && !showApiKey ? MASKED_API_KEY : apiKey}
-                onChange={(e) => { setApiKeyDirty(true); setApiKey(e.target.value); }}
-                onFocus={(e) => {
-                  if (keyData?.hasApiKey && !apiKeyDirty && !showApiKey) e.currentTarget.select();
-                }}
-                placeholder="sk-xxx"
-                autoComplete="new-password"
-              />
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                disabled={revealingApiKey}
-                aria-label={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-                title={showApiKey ? '隐藏 API Key' : '显示 API Key'}
-                onClick={toggleApiKeyVisibility}
-              >
-                {revealingApiKey ? <Loader2 className="animate-spin" /> : showApiKey ? <EyeOff /> : <Eye />}
-              </Button>
-            </div>
-          </div>
-          {upstreamType === 'NEW_API' && (
-            <div className="space-y-3 rounded-lg border p-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium">
-                <KeyRound className="h-3.5 w-3.5" />New API 查余额凭证
-              </div>
-              <div className="space-y-1.5">
-                <Label>AccessToken {keyData?.hasAccessToken && <span className="text-xs text-muted-foreground">（留空不变）</span>}</Label>
-                <div className="relative">
-                  <Input
-                    type={showAccessToken || (keyData?.hasAccessToken && !accessTokenDirty) ? 'text' : 'password'}
-                    className="pr-10 font-mono text-xs"
-                    value={keyData?.hasAccessToken && !accessTokenDirty && !showAccessToken ? MASKED_API_KEY : accessToken}
-                    onChange={(e) => { setAccessTokenDirty(true); setAccessToken(e.target.value); }}
-                    onFocus={(e) => {
-                      if (keyData?.hasAccessToken && !accessTokenDirty && !showAccessToken) e.currentTarget.select();
-                    }}
-                    placeholder="系统访问令牌"
-                    autoComplete="new-password"
-                  />
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    className="absolute right-1 top-1/2 -translate-y-1/2"
-                    disabled={revealingAccessToken}
-                    aria-label={showAccessToken ? '隐藏 AccessToken' : '显示 AccessToken'}
-                    title={showAccessToken ? '隐藏 AccessToken' : '显示 AccessToken'}
-                    onClick={toggleAccessTokenVisibility}
-                  >
-                    {revealingAccessToken ? <Loader2 className="animate-spin" /> : showAccessToken ? <EyeOff /> : <Eye />}
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>用户 ID</Label>
-                <Input className="font-mono" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="数字ID" />
-              </div>
-            </div>
-          )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button type="button" size="sm" variant="outline" onClick={onClose}>取消</Button>
-            <Button type="submit" size="sm" disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
-          </DialogFooter>
-        </form>
-    </>
-  );
-
-  if (embedded) return content;
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-        {content}
-      </DialogContent>
-    </Dialog>
   );
 }

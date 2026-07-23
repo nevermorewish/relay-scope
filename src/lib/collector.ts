@@ -14,6 +14,7 @@ import type { UpstreamType } from './domain-types';
 import { recordUsagePricing } from './usage-pricing';
 import { runRetentionCleanup } from './retention';
 import { runInConcurrencyLanes } from './concurrency-lanes';
+import { syncDynamicModelPrice } from './dynamic-pricing';
 
 export type CollectMode = 'light' | 'heavy';
 
@@ -76,6 +77,7 @@ export async function collectOneKey(
     timeoutMs: config.timeoutMs,
     testModel: selectedModel,
     groupName: key.groupName || key.group,
+    keyName: key.keyName || undefined,
   };
 
   const errors: string[] = [];
@@ -98,6 +100,17 @@ export async function collectOneKey(
   let modelRes = null;
   if (mode === 'heavy') {
     modelRes = await adapter.testModel(ctx, ctx.testModel);
+    if (upstream.type === 'NEW_API') {
+      await syncDynamicModelPrice({
+        upstreamId: upstream.id,
+        upstreamKeyId: key.id,
+        modelName: ctx.testModel,
+        adapter,
+        context: ctx,
+      }).catch((error) => {
+        console.warn('[pricing] dynamic price sync failed:', error instanceof Error ? error.message : error);
+      });
+    }
     if (monitoredModel) {
       await prisma.monitoredModel.update({
         where: { id: monitoredModel.id },
@@ -161,6 +174,7 @@ export async function collectOneKey(
       upstreamKeyId: key.id,
       configuredMultiplier: key.groupRateMultiplier,
       stats: balanceRes.usageStats,
+      dynamicPricing: upstream.type === 'NEW_API',
     }).catch((error) => {
       console.warn('[pricing] usage snapshot failed:', error instanceof Error ? error.message : error);
     });

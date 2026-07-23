@@ -39,7 +39,6 @@ yarn-error.log*
 next-env.d.ts
 
 # local agent and private workspace notes
-AGENTS.md
 Commonality.md
 /codex_plan/
 /.zcode/
@@ -66,3 +65,9 @@ Commonality.md
 *.db-shm
 *.db-wal
 /*.sql
+
+# workspace residue
+.agents/
+.codex/
+error.log
+upstreams-full-width-check.png

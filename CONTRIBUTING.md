@@ -4,16 +4,16 @@
 
 ## 开发环境
 
-需要 Node.js 20 LTS、pnpm 10（或更高版本）和 PostgreSQL。复制 `.env.example` 为 `.env`，设置本地数据库、`APP_ENCRYPTION_KEY` 和管理员密码，然后执行：
+需要 Node.js 20 LTS 与 pnpm 10（或更高版本）。默认使用 SQLite，无需独立数据库服务。复制 `.env.example` 为 `.env.local`，填写 `APP_ENCRYPTION_KEY`、`ADMIN_PASSWORD` 与 `DATABASE_URL`，然后执行：
 
 ```bash
 pnpm install
 pnpm db:generate
-pnpm db:push
+pnpm db:init
 ADMIN_PASSWORD='local-only-password' pnpm db:seed
 ```
 
-需要完整界面数据时，请使用独立数据库并按照 README 的 demo seed 说明操作。不要把真实上游凭证、生产数据库或运行日志放进工作区。
+需要完整界面数据时，按 README 使用 `pnpm db:seed:demo`。不要把真实上游凭证、生产数据库或运行日志放进工作区。
 
 ## 提交改动
 

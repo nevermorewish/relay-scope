@@ -27,7 +27,7 @@ import type {
   UpstreamAdapter,
 } from './base';
 import { buildBaseUrl, fetchWithTimeout } from './base';
-import { normalizeNewApiPricing } from '../pricing';
+import { calculateNewApiLogPrices, normalizeNewApiPricing } from '../pricing';
 
 // new-api quota 换算单位（1 美元 = 500000 quota）
 const QUOTA_PER_UNIT = 500000;
@@ -409,6 +409,74 @@ export class NewApiAdapter implements UpstreamAdapter {
     }
   }
 
+  /** 从用户自己的最近消费日志读取实际路由价格。 */
+  async queryActualPrices(ctx: AdapterContext, model: string): Promise<PricingResult> {
+    if (!ctx.accessToken || !ctx.userId) {
+      return { ok: false, errorMessage: '未配置 accessToken 或 userId，无法读取实际路由价格' };
+    }
+    const baseUrl = buildBaseUrl(ctx.baseUrl);
+    try {
+      const [logRes, statusRes] = await Promise.all([
+        fetchWithTimeout(`${baseUrl}/api/log/self?p=1&size=100`, {
+          headers: { Authorization: `Bearer ${ctx.accessToken}`, 'New-Api-User': ctx.userId, Accept: 'application/json' },
+        }, ctx.timeoutMs),
+        fetchWithTimeout(`${baseUrl}/api/status`, { headers: { Accept: 'application/json' } }, ctx.timeoutMs),
+      ]);
+      if (!logRes.ok) return { ok: false, errorMessage: `实际价格日志接口 HTTP ${logRes.status}` };
+      const logBody = asRecord(await readJson(logRes));
+      const logData = asRecord(logBody?.data);
+      const items = Array.isArray(logData?.items) ? logData.items : [];
+      const logs = items.map(asRecord).filter(Boolean);
+      const matchesModel = (entry: Record<string, unknown>) => (
+        asNonEmptyString(entry.model_name)?.toLowerCase() === model.toLowerCase()
+      );
+      const item = logs.find((entry) => matchesModel(entry!) && (!ctx.keyName || entry?.token_name === ctx.keyName))
+        || logs.find((entry) => matchesModel(entry!));
+      if (!item) return { ok: false, errorMessage: `最近日志中没有模型「${model}」的实际路由记录` };
+
+      const other = parseRecord(item.other);
+      const modelRatio = asFiniteNumber(other?.model_ratio);
+      if (modelRatio == null || modelRatio < 0) {
+        return { ok: false, errorMessage: '实际日志未提供可换算的模型倍率' };
+      }
+      const statusData = asRecord(asRecord(await readJson(statusRes))?.data);
+      const quotaPerUnit = asFiniteNumber(statusData?.quota_per_unit)
+        ?? asFiniteNumber(statusData?.quotaPerUnit)
+        ?? QUOTA_PER_UNIT;
+      if (quotaPerUnit <= 0) return { ok: false, errorMessage: '配额换算单位无效' };
+      const completionRatio = asFiniteNumber(other?.completion_ratio) ?? 1;
+      const cacheRatio = asFiniteNumber(other?.cache_ratio);
+      const groupRatio = positiveOrOne(other?.group_ratio);
+      const userGroupRatio = positiveOrOne(other?.user_group_ratio);
+      const calculated = calculateNewApiLogPrices({
+        modelRatio, completionRatio, cacheRatio, groupRatio, userGroupRatio, quotaPerUnit,
+      });
+      if (!calculated) return { ok: false, errorMessage: '实际日志计价参数无效' };
+      return {
+        ok: true,
+        prices: [{
+          modelName: asNonEmptyString(item.model_name) || model,
+          currency: 'USD',
+          ...calculated,
+          rawData: {
+            observationMode: 'actual-route-log',
+            channelName: asNonEmptyString(item.channel_name),
+            channelId: item.channel,
+            requestId: asNonEmptyString(item.request_id),
+            loggedAt: item.created_at,
+            modelRatio,
+            completionRatio,
+            cacheRatio,
+            groupRatio,
+            userGroupRatio,
+          },
+        }],
+      };
+    } catch (e) {
+      return { ok: false, errorMessage: errMsg(e) };
+    }
+  }
+
   // ============ 私有辅助 ============
 
   private bearerHeaders(apiKey: string): Record<string, string> {
@@ -470,6 +538,18 @@ function asFiniteNumber(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function parseRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === 'string') {
+    try { return asRecord(JSON.parse(value)); } catch { return undefined; }
+  }
+  return asRecord(value);
+}
+
+function positiveOrOne(value: unknown) {
+  const parsed = asFiniteNumber(value);
+  return parsed != null && parsed > 0 ? parsed : 1;
 }
 
 async function safeReadText(res: Response): Promise<string> {

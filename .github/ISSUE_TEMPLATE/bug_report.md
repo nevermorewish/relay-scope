@@ -20,7 +20,7 @@ assignees: ""
 
 - 版本或提交：
 - Node.js：
-- PostgreSQL：
+- SQLite / 数据库：
 - 浏览器：
 
 ## 脱敏日志或截图

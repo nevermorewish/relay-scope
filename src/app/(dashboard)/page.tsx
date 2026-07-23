@@ -47,7 +47,7 @@ interface DashboardItem {
   sampleCount24h: number;
   averageLatencyMs: number | null;
   recentProbes: boolean[];
-  price: { currency: string; inputPrice: number | null; outputPrice: number | null; cacheReadPrice: number | null; source: string } | null;
+  price: { currency: string; inputPrice: number | null; outputPrice: number | null; cacheReadPrice: number | null; source: string; multiplier: number | null } | null;
 }
 
 interface DashboardData {
@@ -217,7 +217,7 @@ export default function DashboardPage() {
           ) : <div className="overflow-x-auto border-y">
             <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
-                {['站点','分组','模型','输入价格','输出价格','倍率','24小时成功率','平均延迟','最近探测','余额','最后采集'].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3 text-left font-medium">{label}</th>)}
+                {['站点','分组','模型','输入价格','输出价格','倍率','24小时成功率','24小时平均延迟','最近探测','余额','最后采集'].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3 text-left font-medium">{label}</th>)}
               </tr></thead>
               <tbody>{filteredItems.map((item) => <tr key={`${item.keyId}:${item.testModel}`} className="border-t transition-colors hover:bg-muted/30">
                 <td className="px-3 py-3"><Link href={`/upstreams/${item.upstreamId}`} className="block"><div className="flex items-center gap-2 font-semibold"><StatusDot status={item.status} />{item.upstreamName}</div></Link></td>
@@ -228,7 +228,12 @@ export default function DashboardPage() {
                 <td className="max-w-44 truncate px-3 py-3 font-mono text-xs" title={item.testModel || ''}>{item.testModel || '未配置'}</td>
                 <td className="px-3 py-3"><PriceValue price={item.price} field="inputPrice" /></td>
                 <td className="px-3 py-3"><PriceValue price={item.price} field="outputPrice" /></td>
-                <td className="px-3 py-3 tabular-nums">{formatMultiplier(item.groupRateMultiplier)}</td>
+                <td
+                  className="px-3 py-3 tabular-nums"
+                  title={item.price?.multiplier != null ? '按最新价格和本站充值汇率换算的实际倍率' : '按本站充值汇率换算的分组倍率'}
+                >
+                  {formatMultiplier(item.price?.multiplier ?? item.groupRateMultiplier)}
+                </td>
                 <td className="px-3 py-3"><div className={cn('font-semibold tabular-nums', rateColor(item.generationSuccess24h))}>{item.generationSuccess24h == null ? '—' : `${item.generationSuccess24h}%`}</div><div className="text-xs text-muted-foreground">{item.sampleCount24h} 次真实生成</div></td>
                 <td className="px-3 py-3 tabular-nums">{formatMs(item.averageLatencyMs)}</td>
                 <td className="px-3 py-3"><ProbeStrip values={item.recentProbes} /></td>
@@ -295,9 +300,19 @@ function StatCard({ label, value, sub, icon: Icon, highlight, href }: {
 
 function PriceValue({ price, field }: { price: DashboardItem['price']; field: 'inputPrice' | 'outputPrice' }) {
   if (!price) return <Link href="/prices" className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">未录入</Link>;
+  if (price.source === 'WAITING') return <span className="text-muted-foreground" title="已读取站点公开目录，等待下一次真实模型测试获取实际路由价格">等待实测</span>;
   const symbol = price.currency === 'CNY' ? '¥' : '$';
   const value = price[field];
-  return <span className="tabular-nums" title={price.source === 'CALCULATED' ? '按官方价格、倍率和充值比例自动计算' : `价格来源：${price.source}`}>{value == null ? '—' : `${symbol}${value.toFixed(4)}`}</span>;
+  const sourceLabel = price.source === 'OBSERVED'
+    ? '最近一次真实路由日志'
+    : price.source === 'MEASURED'
+      ? '实际扣费反推'
+      : price.source === 'AUTO'
+        ? '站点公开价格目录（仅供参考）'
+        : price.source === 'CALCULATED'
+          ? '按官方价格、倍率和充值比例自动计算'
+          : `价格来源：${price.source}`;
+  return <span className="tabular-nums" title={sourceLabel}>{value == null ? '—' : `${symbol}${value.toFixed(4)}`}</span>;
 }
 
 function uniqueBy<T>(items: T[], key: (item: T) => string) {
@@ -319,9 +334,7 @@ function ProbeStrip({ values }: { values: boolean[] }) {
 
 function rateColor(value: number | null) {
   if (value == null) return 'text-muted-foreground';
-  if (value >= 99) return 'text-success';
-  if (value >= 95) return 'text-warning';
-  return 'text-destructive';
+  return value >= 90 ? 'text-success' : 'text-destructive';
 }
 
 function formatMs(value: number | null) {

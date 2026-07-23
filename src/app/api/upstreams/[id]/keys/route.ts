@@ -5,6 +5,7 @@ import { refreshKeyMetadata } from '@/lib/key-metadata-service';
 import { toSafeUpstreamKey } from '@/lib/key-metadata';
 import { normalizeMonitoredModels } from '@/lib/monitored-models';
 import { detectUpstreamType } from '@/lib/upstream-type-detection';
+import { resolveInheritedBalanceCredentials } from '@/lib/key-input';
 import type { UpstreamType } from '@/lib/domain-types';
 
 interface Params {
@@ -61,17 +62,34 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: '分组名不能为空' }, { status: 400 });
     }
 
+    const existingBalanceCredentials = detectedType === 'NEW_API'
+      ? await prisma.upstreamKey.findMany({
+          where: {
+            upstreamId,
+            OR: [
+              { accessTokenEnc: { not: null } },
+              { userId: { not: null } },
+            ],
+          },
+          orderBy: { id: 'asc' },
+          select: { accessTokenEnc: true, userId: true },
+        })
+      : [];
+    const inheritedBalanceCredentials = resolveInheritedBalanceCredentials(existingBalanceCredentials);
+
     const key = await prisma.upstreamKey.create({
       data: {
         upstreamId,
         group,
         label: label || null,
-        userId: userId || null,
+        userId: userId || inheritedBalanceCredentials.userId || null,
         testModel: fallbackModel,
         enabled: enabled !== false,
         groupRateMultiplier: groupRateMultiplier == null ? null : Number(groupRateMultiplier),
         apiKeyEnc: apiKey ? encrypt(apiKey) : undefined,
-        accessTokenEnc: accessToken ? encrypt(accessToken) : undefined,
+        accessTokenEnc: accessToken
+          ? encrypt(accessToken)
+          : inheritedBalanceCredentials.accessTokenEnc || undefined,
         monitoredModels: { create: monitoredModels },
       },
       include: { monitoredModels: { orderBy: { id: 'asc' } } },

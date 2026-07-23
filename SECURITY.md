@@ -10,7 +10,7 @@
 
 请通过 GitHub Security Advisories 提交私密报告：
 
-<https://github.com/yigehaozi/relay-status-monitor/security/advisories/new>
+<https://github.com/dante1007108174-droid/relay-status-monitor/security/advisories/new>
 
 报告应包含：受影响版本、复现步骤、影响范围、临时缓解措施，以及已经脱敏的日志或请求示例。维护者会在确认收到后尽快回复，并在修复准备好后更新报告状态。
 

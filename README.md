@@ -2,7 +2,8 @@
 
 面向个人自用的 AI API 中转站监控面板。支持 New API、SUB2API 和通用 OpenAI Compatible 站点，自动比较价格、倍率、余额、真实生成成功率、平均延迟和最近探测状态。
 
-项目基于 MIT 许可的 [relay-status-monitor](https://github.com/yigehaozi/relay-status-monitor) 二次开发，保留原项目许可证。
+基于 [relay-status-monitor](https://github.com/yigehaozi/relay-status-monitor)（MIT）二次开发，见 [LICENSE](./LICENSE)。
+
 
 ## 本地运行
 
@@ -30,7 +31,7 @@ docker compose up -d
 ## 使用流程
 
 1. 在“上游管理”添加站点，选择 New API、SUB2API 或 OpenAI 兼容类型。
-2. 编辑站点并添加专用监测 Key，设置该分组使用的测试模型。
+2. 编辑站点并添加专用监测 Key，设置该分组使用的测试模型。New API 站点新增分组时会自动继承本站已保存的余额访问令牌和用户 ID。
 3. 先执行一次完整测试，确认模型列表、流式响应和余额接口兼容。
 4. 在“模型价格”自动同步 New API 价格；其他站点手工录入输入、输出和缓存价格。
 5. 启动网站服务后会自动开始监测，停止网站服务后监测也随之停止；真实生成探测频率在设置页配置，默认每 15 分钟执行。
@@ -49,6 +50,18 @@ docker compose up -d
 
 需要恢复登录保护时，将 `AUTH_DISABLED` 和 `NEXT_PUBLIC_AUTH_DISABLED` 设为 `false`，再通过 `pnpm db:seed` 创建管理员。
 
+## 手动备份与恢复
+
+Git 只保存源码，不保存 SQLite 数据库、站点凭证或 `.env.local`。需要建立本机完整备份时手动执行：
+
+```bash
+pnpm db:backup
+```
+
+命令使用 SQLite 一致性快照，在 `backups/<时间>/` 中生成 `dev.db`、`.env.local` 和备份清单。该目录包含可解密 API Key 的完整材料，已被 Git 忽略，仍必须作为敏感数据保管。命令不会自动运行，也不会自动删除旧备份。
+
+恢复时：先停止监测服务，备份当前数据，再用目标备份中的 `dev.db` 替换 `prisma/dev.db`、用 `.env.local` 替换项目根目录同名文件，并移除旧的 `prisma/dev.db-wal` 和 `prisma/dev.db-shm`，然后重新启动服务。
+
 ## 验证
 
 ```bash
@@ -60,3 +73,7 @@ pnpm build
 ## License
 
 MIT，详见 [LICENSE](LICENSE)。
+
+## 聚合平台动态价格
+
+New API/A6API 等会动态路由的聚合平台，在重量采集轮到某个模型时读取 `/api/log/self` 中最近一次真实路由日志，按日志里的模型、输出、缓存和分组倍率还原实际价格；日志读取不消耗模型 Token。累计用量中的 `actual_cost` 也可结合内置官方价格反推出该模型的有效倍率，真实日志和实测价格优先于公开价格目录。价格没有变化时不会重复写入，超过 24 小时会刷新一次基准；单次变化达到 5% 会生成价格变化事件。

@@ -21,6 +21,8 @@ export interface AdapterContext {
   testModel: string;
   /** 当前 Token 所属分组，用于计算分组价格 */
   groupName?: string;
+  /** 当前 Token 的远端名称，用于匹配用户消费日志。 */
+  keyName?: string;
 }
 
 /** 余额查询结果 */
@@ -139,6 +141,9 @@ export interface UpstreamAdapter {
 
   /** 获取模型价格；没有结构化价格接口的上游可不实现。 */
   queryPricing?(ctx: AdapterContext): Promise<PricingResult>;
+
+  /** 获取最近实际路由日志中的模型价格；用于动态路由聚合平台。 */
+  queryActualPrices?(ctx: AdapterContext, model: string): Promise<PricingResult>;
 }
 
 /** 辅助：构造规范的 base URL（带协议） */

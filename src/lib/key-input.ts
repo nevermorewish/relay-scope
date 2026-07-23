@@ -9,6 +9,15 @@ export interface UpstreamKeyInput {
   groupRateMultiplier?: number | null;
 }
 
+export function resolveInheritedBalanceCredentials(
+  keys: Array<{ accessTokenEnc: string | null; userId: string | null }>,
+) {
+  return {
+    accessTokenEnc: keys.find((key) => key.accessTokenEnc)?.accessTokenEnc || null,
+    userId: keys.find((key) => key.userId?.trim())?.userId || null,
+  };
+}
+
 export function buildKeyUpdateData(
   input: UpstreamKeyInput,
   encryptValue: (value: string) => string

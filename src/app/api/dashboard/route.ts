@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
+import { deriveEffectiveMultiplier } from '@/lib/pricing';
 import { calculateEffectivePrice } from '@/lib/official-model-prices';
 
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,10 @@ export async function GET() {
     const key = price.upstreamKeyId
       ? `key:${price.upstreamKeyId}:${price.modelName}`
       : `upstream:${price.upstreamId}:${price.modelName}`;
-    if (!latestPrice.has(key)) latestPrice.set(key, price);
+    const current = latestPrice.get(key);
+    if (!current || priceSourcePriority(price.source) > priceSourcePriority(current.source)) {
+      latestPrice.set(key, price);
+    }
   }
   const lightMetrics = metrics.filter((metric) => metric.probeMode === 'LIGHT');
   const totalCount = lightMetrics.length;
@@ -116,7 +120,9 @@ export async function GET() {
           keyName: k.keyName,
           groupName: k.groupName,
           groupDescription: k.groupDescription,
-          groupRateMultiplier: k.groupRateMultiplier,
+          groupRateMultiplier: k.groupRateMultiplier == null
+            ? null
+            : Math.round(k.groupRateMultiplier / u.creditUsdPerCny * 10000) / 10000,
           creditUsdPerCny: u.creditUsdPerCny,
           remoteKeyId: k.remoteKeyId,
           status: k.status,
@@ -161,29 +167,56 @@ export async function GET() {
 }
 
 function resolvePrice(
-  snapshot: { currency: string; inputPrice: number | null; outputPrice: number | null; cacheReadPrice: number | null; source: string } | undefined,
+  snapshot: { currency: string; inputPrice: number | null; outputPrice: number | null; cacheReadPrice: number | null; source: string; rawData?: unknown } | undefined,
   model: { officialInputPrice: number | null; officialOutputPrice: number | null },
   multiplier: number | null,
   creditUsdPerCny: number,
 ) {
   if (snapshot) {
+    const rawData = snapshot.rawData;
+    if (snapshot.source === 'AUTO' && rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+      && (rawData as Record<string, unknown>).observationMode === 'dynamic-route') {
+      return { currency: 'CNY', inputPrice: null, outputPrice: null, cacheReadPrice: null, source: 'WAITING', multiplier: null };
+    }
     const divisor = snapshot.currency === 'USD' ? creditUsdPerCny : 1;
+    const observedMultiplier = snapshot.currency === 'USD'
+      ? deriveEffectiveMultiplier(snapshot, {
+          input: model.officialInputPrice,
+          output: model.officialOutputPrice,
+        })
+      : null;
     return {
       currency: snapshot.currency === 'USD' ? 'CNY' : snapshot.currency,
       inputPrice: snapshot.inputPrice == null ? null : snapshot.inputPrice / divisor,
       outputPrice: snapshot.outputPrice == null ? null : snapshot.outputPrice / divisor,
       cacheReadPrice: snapshot.cacheReadPrice == null ? null : snapshot.cacheReadPrice / divisor,
       source: snapshot.source,
+      multiplier: observedMultiplier == null ? null : Math.round(observedMultiplier / creditUsdPerCny * 10000) / 10000,
     };
   }
   const inputPrice = calculateEffectivePrice(model.officialInputPrice, multiplier, creditUsdPerCny);
   const outputPrice = calculateEffectivePrice(model.officialOutputPrice, multiplier, creditUsdPerCny);
   if (inputPrice == null && outputPrice == null) return null;
-  return { currency: 'CNY', inputPrice, outputPrice, cacheReadPrice: null, source: 'CALCULATED' };
+  return {
+    currency: 'CNY',
+    inputPrice,
+    outputPrice,
+    cacheReadPrice: null,
+    source: 'CALCULATED',
+    multiplier: multiplier == null ? null : Math.round(multiplier / creditUsdPerCny * 10000) / 10000,
+  };
 }
 
 function average(values: Array<number | null>) {
   const valid = values.filter((value): value is number => value != null && Number.isFinite(value));
   if (!valid.length) return null;
   return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
+}
+
+function priceSourcePriority(source: string) {
+  if (source === 'OBSERVED') return 5;
+  if (source === 'MEASURED') return 4;
+  if (source === 'MANUAL') return 3;
+  if (source === 'AUTO') return 2;
+  return 1;
 }

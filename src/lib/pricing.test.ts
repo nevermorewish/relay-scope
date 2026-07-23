@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeNewApiPricing, percentile } from './pricing';
+import { calculateNewApiLogPrices, deriveEffectiveMultiplier, maxRelativePriceChange, normalizeNewApiPricing, percentile } from './pricing';
 
 test('normalizes New API token ratios with group multiplier', () => {
   const prices = normalizeNewApiPricing({
@@ -22,4 +22,33 @@ test('calculates nearest-rank percentiles', () => {
   assert.equal(percentile([10, 20, 30, 40], 0.5), 20);
   assert.equal(percentile([10, 20, 30, 40], 0.95), 40);
   assert.equal(percentile([], 0.5), null);
+});
+
+test('detects the largest relative price change', () => {
+  assert.ok(Math.abs((maxRelativePriceChange(
+    { inputPrice: 2, outputPrice: 6 },
+    { inputPrice: 2.1, outputPrice: 7.2 },
+  ) ?? 0) - 0.2) < 1e-9);
+});
+
+test('derives a model-level effective multiplier from official prices', () => {
+  assert.equal(deriveEffectiveMultiplier(
+    { inputPrice: 0.06, outputPrice: 0.18 },
+    { input: 2, output: 6 },
+  ), 0.03);
+});
+
+test('calculates A6 actual route prices from New API log ratios', () => {
+  assert.deepEqual(calculateNewApiLogPrices({
+    modelRatio: 0.0252,
+    completionRatio: 6,
+    cacheRatio: 0.1,
+    groupRatio: 1,
+    userGroupRatio: -1,
+    quotaPerUnit: 500000,
+  }), {
+    inputPrice: 0.0504,
+    outputPrice: 0.3024,
+    cacheReadPrice: 0.00504,
+  });
 });

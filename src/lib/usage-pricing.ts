@@ -1,5 +1,6 @@
 import type { ModelUsageStats } from './adapters/base';
 import { prisma } from './db';
+import { getOfficialModelPrice } from './official-model-prices';
 
 export interface UsagePoint {
   inputTokens: number;
@@ -50,6 +51,7 @@ export async function recordUsagePricing(params: {
   upstreamKeyId: number;
   configuredMultiplier: number | null;
   stats: ModelUsageStats[];
+  dynamicPricing?: boolean;
 }) {
   for (const stat of params.stats) {
     const previous = await prisma.usageSnapshot.findFirst({
@@ -70,9 +72,6 @@ export async function recordUsagePricing(params: {
         actualCost: stat.actualCost,
       },
     });
-    if (!previous || !params.configuredMultiplier || params.configuredMultiplier <= 0) continue;
-    const configuredMultiplier = params.configuredMultiplier;
-
     const price = await prisma.priceSnapshot.findFirst({
       where: {
         upstreamId: params.upstreamId,
@@ -81,22 +80,34 @@ export async function recordUsagePricing(params: {
       },
       orderBy: { recordedAt: 'desc' },
     });
-    if (!price) continue;
-    const baseline = {
-      inputPrice: dividePrice(price.inputPrice, configuredMultiplier),
-      outputPrice: dividePrice(price.outputPrice, configuredMultiplier),
-      cacheReadPrice: dividePrice(price.cacheReadPrice, configuredMultiplier),
-      cacheWritePrice: dividePrice(price.cacheWritePrice, configuredMultiplier),
-    };
+    const configuredMultiplier = params.configuredMultiplier && params.configuredMultiplier > 0
+      ? params.configuredMultiplier
+      : null;
+    const official = getOfficialModelPrice(stat.modelName);
+    const baseline = official
+      ? { inputPrice: official.input, outputPrice: official.output, cacheReadPrice: null, cacheWritePrice: null }
+      : price && configuredMultiplier
+        ? {
+            inputPrice: dividePrice(price.inputPrice, configuredMultiplier),
+            outputPrice: dividePrice(price.outputPrice, configuredMultiplier),
+            cacheReadPrice: dividePrice(price.cacheReadPrice, configuredMultiplier),
+            cacheWritePrice: dividePrice(price.cacheWritePrice, configuredMultiplier),
+          }
+        : null;
+    if (!previous || !baseline || !price) continue;
     const measured = estimatePricingFromUsage(previous, stat, baseline);
     if (!measured) continue;
 
     const roundedMultiplier = round(measured.multiplier, 4);
-    const relativeChange = Math.abs(roundedMultiplier - configuredMultiplier) / configuredMultiplier;
     const lastMeasured = await prisma.priceSnapshot.findFirst({
       where: { upstreamKeyId: params.upstreamKeyId, modelName: stat.modelName, source: 'MEASURED' },
       orderBy: { recordedAt: 'desc' },
     });
+    const previousMeasuredMultiplier = readMeasuredMultiplier(lastMeasured?.rawData);
+    const referenceMultiplier = params.dynamicPricing ? previousMeasuredMultiplier : configuredMultiplier;
+    const relativeChange = referenceMultiplier
+      ? Math.abs(roundedMultiplier - referenceMultiplier) / referenceMultiplier
+      : 0;
     const verificationExpired = !lastMeasured || lastMeasured.recordedAt.getTime() < Date.now() - 24 * 60 * 60 * 1000;
     if (relativeChange < 0.02 && !verificationExpired) continue;
 
@@ -107,10 +118,12 @@ export async function recordUsagePricing(params: {
       cacheWritePrice: multiplyPrice(baseline.cacheWritePrice, roundedMultiplier),
     };
     await prisma.$transaction(async (tx) => {
-      await tx.upstreamKey.update({
-        where: { id: params.upstreamKeyId },
-        data: { groupRateMultiplier: roundedMultiplier },
-      });
+      if (!params.dynamicPricing) {
+        await tx.upstreamKey.update({
+          where: { id: params.upstreamKeyId },
+          data: { groupRateMultiplier: roundedMultiplier },
+        });
+      }
       await tx.priceSnapshot.create({
         data: {
           upstreamId: params.upstreamId,
@@ -120,7 +133,7 @@ export async function recordUsagePricing(params: {
           ...nextPrice,
           source: 'MEASURED',
           rawData: {
-            previousMultiplier: configuredMultiplier,
+            previousMultiplier: referenceMultiplier,
             measuredMultiplier: measured.multiplier,
             baselineCost: measured.baselineCost,
             actualCost: measured.delta.actualCost,
@@ -135,7 +148,9 @@ export async function recordUsagePricing(params: {
             upstreamKeyId: params.upstreamKeyId,
             type: 'PRICE_CHANGED',
             severity: 'WARNING',
-            message: `${stat.modelName} 实测倍率从 ${configuredMultiplier.toFixed(4)} 变为 ${roundedMultiplier.toFixed(4)}`,
+            message: referenceMultiplier == null
+              ? `${stat.modelName} 首次测得实际倍率 ${roundedMultiplier.toFixed(4)}`
+              : `${stat.modelName} 实测倍率从 ${referenceMultiplier.toFixed(4)} 变为 ${roundedMultiplier.toFixed(4)}`,
             metricValue: roundedMultiplier,
           },
         });
@@ -150,6 +165,12 @@ function usageUnchanged(previous: UsagePoint, current: UsagePoint) {
     && previous.cacheReadTokens === current.cacheReadTokens
     && previous.cacheWriteTokens === current.cacheWriteTokens
     && previous.actualCost === current.actualCost;
+}
+
+function readMeasuredMultiplier(rawData: unknown): number | null {
+  if (!rawData || typeof rawData !== 'object' || Array.isArray(rawData)) return null;
+  const value = (rawData as Record<string, unknown>).measuredMultiplier;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function dividePrice(value: number | null, multiplier: number) {
