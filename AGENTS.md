@@ -7,7 +7,8 @@
 - 名称：relay-status-monitor（中转站监测）
 - 用途：自托管的 AI API 中转站监控面板（余额、延迟、模型测试、告警）
 - 栈：Next.js 14.2.35 App Router + TypeScript + Prisma + SQLite + Tailwind
-- 包管理：pnpm
+- 运行时：Node.js >= 22.5（初始化脚本使用 `node:sqlite`）
+- 包管理：pnpm 11.9.0
 - 默认端口：3000
 
 ## 本地常用命令
@@ -54,6 +55,8 @@ pnpm build
 4. **认证**：生产关闭 `AUTH_DISABLED`；本地可用 `AUTH_DISABLED=true`。
 5. **改 schema 后**：跑 `pnpm db:generate`，并按需要 `pnpm db:push` / `pnpm db:init`。
 6. **风格**：跟随现有代码；不要无故加注释；不要擅自 commit。
+7. **模型恢复语义**：轻量余额/模型列表检查不得覆盖最近一次真实模型测试失败；只有同一模型后续真实测试成功才恢复。
+8. **部署边界**：官方默认配置仅面向本机或可信内网；Docker 只绑定 `127.0.0.1`，不得把免登录面板描述为适合直接暴露公网。
 
 ## 文档同步
 

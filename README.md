@@ -1,20 +1,24 @@
 # 中转站监控
 
-面向个人自用的 AI API 中转站监控面板。支持 New API、SUB2API 和通用 OpenAI Compatible 站点，自动比较价格、倍率、余额、真实生成成功率、平均延迟和最近探测状态。
+面向个人自用的 AI API 中转站监控面板。支持 New API、SUB2API 和通用 OpenAI Compatible 站点，自动比较价格、倍率、余额、真实生成成功率、平均延迟和最近探测状态。官方版本只建议在本机或可信内网运行，不建议把面板直接暴露到公网。
 
 基于 [relay-status-monitor](https://github.com/yigehaozi/relay-status-monitor)（MIT）二次开发，见 [LICENSE](./LICENSE)。
 
 
 ## 本地运行
 
-要求 Node.js 20 或更高版本。
+要求 Node.js 22.5 或更高版本，并使用项目固定的 pnpm 11.9.0。初始化脚本依赖 Node 内置 SQLite，Node 20 无法运行。
 
 ```bash
+cp .env.example .env.local
+# 编辑 .env.local，替换 APP_ENCRYPTION_KEY、CRON_SECRET 和 ADMIN_PASSWORD
 pnpm install
 pnpm db:generate
 pnpm db:init
 pnpm dev
 ```
+
+Windows PowerShell 可使用 `Copy-Item .env.example .env.local`。`APP_ENCRYPTION_KEY` 应使用至少 32 位的独立随机值，不能继续使用示例占位文本。
 
 默认打开 [http://localhost:3000](http://localhost:3000)。本地配置默认启用免登录模式，数据库保存在 `prisma/dev.db`，不需要 PostgreSQL。
 
@@ -26,7 +30,7 @@ pnpm dev
 docker compose up -d
 ```
 
-应用监听 `http://localhost:3000`，SQLite 数据保存在 Docker volume `monitor_data`。
+应用默认只监听本机 `http://127.0.0.1:3000`，SQLite 数据保存在 Docker volume `monitor_data`。如需可信内网访问，部署者需要自行修改端口绑定并启用登录保护。
 
 ## 使用流程
 
@@ -40,6 +44,7 @@ docker compose up -d
 
 - 轻量探测：余额与 `/v1/models`，不发送生成请求。
 - 真实生成探测：发送一次最多生成 5 Token 的短请求，同时记录成功率和完整响应延迟。
+- 模型恢复：模型真实测试失败后保持异常；每分钟余额和模型列表检查不能将其标记为恢复，只有该模型下一次真实测试成功才恢复。
 - 站点详情：分组卡片显示最近一次真实模型测试的延迟和时间，手动单模型测试完成后立即更新。
 - 延迟：界面统一以秒显示；内部仍以毫秒保存和计算。真实模型测试默认等待 30 秒后才判定超时，可在系统设置中调整。
 - 测试并发：不同 API 凭证可并行执行；相同站点地址与 API Key 的任务自动排队，手动测试不会再被其他站点的自动检测阻塞。
@@ -51,9 +56,11 @@ docker compose up -d
 
 ## 安全
 
-免登录模式只适合本机或受信任内网，不应直接暴露公网。API Key 和 Access Token 仍使用 AES-256-GCM 加密保存；`APP_ENCRYPTION_KEY` 必须使用至少 32 位随机值，且不能与数据库一起公开。
+公开 GitHub 源码不会上传用户自己的 API 数据；真正需要避免的是把运行中的监测面板、SQLite、环境文件或备份暴露给他人。免登录模式只适合本机或可信内网，不应直接暴露公网。API Key 和 Access Token 使用 AES-256-GCM 加密保存；`APP_ENCRYPTION_KEY` 必须使用至少 32 位随机值，且不能与数据库一起公开。
 
 需要恢复登录保护时，将 `AUTH_DISABLED` 和 `NEXT_PUBLIC_AUTH_DISABLED` 设为 `false`，再通过 `pnpm db:seed` 创建管理员。
+
+本项目采用 MIT 许可证，使用者可以自行修改和部署。若自行改造成远程服务，需要自行负责身份认证、HTTPS、防火墙、访问控制和凭证安全；官方默认配置不以公网托管为目标。
 
 ## 手动备份与恢复
 

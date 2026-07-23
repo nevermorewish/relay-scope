@@ -12,6 +12,9 @@ const NAV_ITEMS = [
   { href: '/', label: '总览', icon: LayoutDashboard },
   { href: '/upstreams', label: '上游管理', icon: Server },
   { href: '/incidents', label: '告警事件', icon: Bell },
+];
+
+const AUX_NAV_ITEMS = [
   { href: '/settings', label: '设置', icon: Settings },
   { href: '/help', label: '使用帮助', icon: BookOpen },
 ];
@@ -104,7 +107,27 @@ function SidebarContent({
         })}
       </nav>
 
-      <div className="space-y-1">
+      <div className="space-y-1 border-t pt-3">
+        {AUX_NAV_ITEMS.map((item) => {
+          const active = pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                active
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
         <ThemeToggleRow />
         {!authDisabled && <button
           onClick={onLogout}

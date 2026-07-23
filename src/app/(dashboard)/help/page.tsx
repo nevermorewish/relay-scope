@@ -51,7 +51,7 @@ export default function HelpPage() {
       <PageHeader
         icon={BookOpen}
         title="使用帮助"
-        description="了解如何添加站点、执行测试、查看价格和处理告警"
+        description="了解如何在本机添加站点、执行测试、查看价格和处理告警"
         actions={(
           <Button variant="outline" size="sm" asChild>
             <a href={GITHUB_URL} target="_blank" rel="noreferrer">
@@ -70,6 +70,9 @@ export default function HelpPage() {
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
               创建站点后添加分组、API Key 和模型，先手动测试确认接口可用，再开启自动监测。真实模型测试会消耗少量 Token，余额和模型列表检查不会发送生成请求。
             </p>
+            <div className="mt-3">
+              <Notice icon={ShieldCheck}>本项目默认用于本机或可信内网。面板包含可操作的 API 凭证和账户数据，不建议直接暴露到公网。</Notice>
+            </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" asChild><Link href="/upstreams">前往上游管理</Link></Button>
               <Button size="sm" variant="outline" asChild><a href="#quick-start">查看完整步骤</a></Button>
@@ -191,7 +194,7 @@ function createHelpSections(): HelpSectionDefinition[] {
         <div className="space-y-3">
           <Definition title="API Key" description="真实模型测试的核心凭证，通常是 sk- 开头。默认以星号掩码保存，点击小眼睛才会读取完整内容。" />
           <Definition title="Access Token 与用户 ID" description="主要用于部分 New API 平台读取账户余额、消费日志和动态倍率。缺少它们时，API Key 仍可能正常完成模型测试，但账户信息会提示“需配置”。" />
-          <Notice icon={ShieldCheck}>凭证使用 APP_ENCRYPTION_KEY 加密写入本机 SQLite。公开部署前必须更换加密密钥，并关闭免登录模式。</Notice>
+          <Notice icon={ShieldCheck}>凭证使用 APP_ENCRYPTION_KEY 加密写入本机 SQLite。不要上传数据库、环境文件或备份，也不要把运行中的面板直接暴露到公网。</Notice>
         </div>
       ),
     },
@@ -245,8 +248,8 @@ function createHelpSections(): HelpSectionDefinition[] {
         <div className="grid gap-3 sm:grid-cols-2">
           <Definition title="24 小时成功率" description="最近 24 小时真实模型生成成功次数占比。90% 及以上显示绿色，低于 90% 显示红色。" />
           <Definition title="平均延迟" description="最近 24 小时真实模型测试的完整响应耗时，界面统一以秒显示。" />
-          <Definition title="在线" description="基础连接正常，最近一次有效模型测试没有发现异常。" />
-          <Definition title="降级" description="基础连接仍可用，但真实生成失败、超时或延迟明显偏高。" />
+          <Definition title="在线" description="基础连接正常，并且每个启用模型最近一次真实测试均未发现异常。" />
+          <Definition title="降级" description="基础连接仍可用，但某个模型最近一次真实生成失败、超时或当前延迟明显偏高。轻量检查成功不会覆盖模型异常。" />
           <Definition title="离线" description="余额和基础连通检查都无法成功，通常需要检查地址、凭证或站点状态。" />
           <Definition title="未知 / 需配置" description="未知表示尚无有效检查；需配置表示缺少完整监测或账户读取信息，可点击进入编辑。" />
         </div>
@@ -260,7 +263,7 @@ function createHelpSections(): HelpSectionDefinition[] {
       icon: Bell,
       content: (
         <div className="space-y-3">
-          <Definition title="运行异常" description="包括不可用、真实测试失败和延迟过高。下一次检查恢复正常后，事件会自动标记为恢复。" />
+          <Definition title="运行异常" description="包括不可用、真实测试失败和延迟过高。连通异常可由后续轻量检查恢复；模型失败只有同一模型再次真实测试成功后才恢复。" />
           <Definition title="价格变化" description="表示倍率或价格基准发生变化，不存在技术意义上的“恢复”，需要用户点击“确认”。" />
           <Definition title="通知渠道" description="可在设置中配置飞书 Webhook。告警生成或运行异常恢复时，会向启用的渠道发送通知。" />
         </div>
@@ -280,7 +283,7 @@ function createHelpSections(): HelpSectionDefinition[] {
             <li>备份包含能够解密 API Key 的材料，不能上传 GitHub，也不能公开分享。</li>
             <li>源码 Git 版本不能替代数据备份；Git 不会保存数据库、站点凭证和本机配置。</li>
           </ul>
-          <Notice icon={AlertTriangle}>公网部署时请设置管理员密码、关闭 AUTH_DISABLED，并使用随机 APP_ENCRYPTION_KEY 和 CRON_SECRET。</Notice>
+          <Notice icon={AlertTriangle}>官方版本只建议在本机或可信内网运行，并默认让 Docker 仅监听 127.0.0.1。若用户自行修改为远程访问，需要自行承担认证、HTTPS、防火墙和访问控制配置。</Notice>
         </div>
       ),
     },
@@ -297,6 +300,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <Faq question="为什么价格显示未录入？">内置价格库没有匹配模型名称，或动态平台尚未产生可用于反推价格的消费日志。请检查模型名称格式或手动填写官方价格。</Faq>
           <Faq question="自动监测为什么没有运行？">确认网站服务正在运行、自动监测开关已开启、站点和分组没有暂停。关闭网站服务后，本机后台调度也会停止。</Faq>
           <Faq question="监测数据会一直占用硬盘吗？">会持续产生少量指标记录，但系统每天清理超过数据保留天数的明细。可在设置中调整保留天数。</Faq>
+          <Faq question="可以把监测面板直接放到公网吗？">不建议。面板包含 API 凭证、余额和测试操作，官方配置只面向本机或可信内网。源码可以自行修改，但远程部署的认证和网络安全需要部署者自行负责。</Faq>
         </div>
       ),
     },

@@ -13,23 +13,10 @@ jobs:
     name: Validate
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/relay_monitor_ci?schema=public
+      DATABASE_URL: file:./ci.db
+      SQLITE_PATH: prisma/ci.db
       APP_ENCRYPTION_KEY: ci-only-placeholder-encryption-key-32-bytes
       CRON_SECRET: ci-only-placeholder-cron-secret
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: relay_monitor_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d relay_monitor_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,12 +24,12 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 11.9.0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
@@ -51,8 +38,11 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm db:generate
 
-      - name: Push database schema
-        run: pnpm db:push
+      - name: Initialize SQLite database
+        run: pnpm db:init
+
+      - name: Test
+        run: pnpm test
 
       - name: Lint
         run: pnpm lint

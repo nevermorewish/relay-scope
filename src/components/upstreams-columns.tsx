@@ -311,9 +311,8 @@ function MonitoringTargets({ upstream }: { upstream: UpstreamRow }) {
   return (
     <div className="space-y-1.5 py-1">
       {targets.map(({ key, model }) => {
-        const recovered = model.latestTest?.ok === false && key.status === 'ONLINE';
-        const failed = model.latestTest?.ok === false && !recovered;
-        const healthy = model.latestTest?.ok === true || recovered;
+        const failed = model.latestTest?.ok === false;
+        const healthy = model.latestTest?.ok === true;
         const content = (
           <span className="flex min-w-0 items-center gap-1.5">
             {failed ? (

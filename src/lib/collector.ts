@@ -16,6 +16,7 @@ import { runRetentionCleanup } from './retention';
 import { runInConcurrencyLanes } from './concurrency-lanes';
 import { syncDynamicModelPrice } from './dynamic-pricing';
 import { withCredentialLane } from './monitor-runtime';
+import { combineCollectionAndModelStatus } from './model-health';
 
 export type CollectMode = 'light' | 'heavy';
 
@@ -165,7 +166,9 @@ async function collectOneKeyInLane(
   });
 
   // 更新 key 缓存
-  const newStatus = deriveStatus(balanceRes, latencyRes, modelRes);
+  const collectionStatus = deriveStatus(balanceRes, latencyRes, modelRes);
+  const latestModelResults = await getLatestEnabledModelResults(key.id);
+  const newStatus = combineCollectionAndModelStatus(collectionStatus, latestModelResults);
   const updateData: Record<string, unknown> = {
     status: newStatus,
     lastBalance: balanceRes.balance ?? undefined,
@@ -222,6 +225,26 @@ function deriveStatus(
   if (model && !model.ok) return 'DEGRADED';
   if (latency.ok && latency.latencyMs && latency.latencyMs > 3000) return 'DEGRADED';
   return 'ONLINE';
+}
+
+async function getLatestEnabledModelResults(upstreamKeyId: number) {
+  const models = await prisma.monitoredModel.findMany({
+    where: { upstreamKeyId, enabled: true },
+    select: { modelName: true },
+  });
+  return Promise.all(models.map(async (model) => {
+    const latest = await prisma.metric.findFirst({
+      where: {
+        upstreamKeyId,
+        probeMode: 'HEAVY',
+        testModel: model.modelName,
+        modelTestOk: { not: null },
+      },
+      orderBy: { recordedAt: 'desc' },
+      select: { modelTestOk: true },
+    });
+    return latest?.modelTestOk ?? null;
+  }));
 }
 
 /** 聚合多个 key 的状态为 upstream 汇总状态 */
