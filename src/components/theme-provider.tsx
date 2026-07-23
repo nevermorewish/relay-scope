@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // 初始化：读 localStorage，否则跟随系统
   useEffect(() => {
-    const stored = localStorage.getItem('rsm-theme') as Theme | null;
+    const stored = (localStorage.getItem('relayscope-theme') || localStorage.getItem('rsm-theme')) as Theme | null;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initial = stored || (prefersDark ? 'dark' : 'light');
     setThemeState(initial);
@@ -38,7 +38,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   function setTheme(t: Theme) {
     setThemeState(t);
-    localStorage.setItem('rsm-theme', t);
+    localStorage.setItem('relayscope-theme', t);
+    localStorage.removeItem('rsm-theme');
     applyTheme(t);
   }
 

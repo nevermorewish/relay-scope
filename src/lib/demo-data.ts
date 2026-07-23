@@ -51,6 +51,8 @@ export interface DemoMetricRecord {
   modelTestLatMs: number | null;
   streamTps: number | null;
   streamFirstLat: number | null;
+  probeMode: 'LIGHT' | 'HEAVY';
+  testModel: string | null;
   success: boolean;
   errorMessage: string | null;
   recordedAt: Date;
@@ -128,17 +130,17 @@ export function readDemoSeedEnvironment(
 
 const UPSTREAMS: DemoUpstreamRecord[] = [
   upstream('aurora', 'Aurora Relay', 'NEW_API', 'ONLINE', 120, 'gpt-4o-mini'),
-  upstream('borealis', 'Borealis Gateway', 'SUB2API', 'DEGRADED', 110, 'claude-3-5-haiku'),
+  upstream('borealis', 'Borealis Gateway', 'SUB2API', 'DEGRADED', 110, 'claude-sonnet-4.6'),
   upstream('citrine', 'Citrine Cloud', 'NEW_API', 'OFFLINE', 100, 'gpt-4o-mini'),
-  upstream('dahlia', 'Dahlia Edge', 'SUB2API', 'UNKNOWN', 90, 'gemini-2.0-flash'),
+  upstream('dahlia', 'Dahlia Edge', 'SUB2API', 'UNKNOWN', 90, 'gemini-3-flash-preview'),
   upstream('ember', 'Ember AI', 'NEW_API', 'ONLINE', 80, 'gpt-4o-mini'),
-  upstream('fjord', 'Fjord Bridge', 'SUB2API', 'ONLINE', 70, 'claude-3-5-haiku'),
+  upstream('fjord', 'Fjord Bridge', 'SUB2API', 'ONLINE', 70, 'claude-sonnet-4.6'),
   upstream('grove', 'Grove Models', 'NEW_API', 'DEGRADED', 60, 'gpt-4o-mini'),
-  upstream('harbor', 'Harbor Route', 'SUB2API', 'ONLINE', 50, 'gemini-2.0-flash'),
+  upstream('harbor', 'Harbor Route', 'SUB2API', 'ONLINE', 50, 'gemini-3-flash-preview'),
   upstream('ion', 'Ion Compute', 'NEW_API', 'OFFLINE', 40, 'gpt-4o-mini'),
-  upstream('juniper', 'Juniper Hub', 'SUB2API', 'ONLINE', 30, 'claude-3-5-haiku'),
+  upstream('juniper', 'Juniper Hub', 'SUB2API', 'ONLINE', 30, 'claude-sonnet-4.6'),
   upstream('kepler', 'Kepler Proxy', 'NEW_API', 'UNKNOWN', 20, 'gpt-4o-mini'),
-  upstream('lumen', 'Lumen Relay', 'SUB2API', 'DEGRADED', 10, 'gemini-2.0-flash'),
+  upstream('lumen', 'Lumen Relay', 'SUB2API', 'DEGRADED', 10, 'gemini-3-flash-preview'),
 ];
 
 interface KeyTemplate {
@@ -271,6 +273,7 @@ function buildMetrics(keys: DemoKeyRecord[], referenceDate: Date): DemoMetricRec
           ? null
           : Math.max(120, keyRecord.lastLatencyMs + variation * 24 + (keyRecord.status === 'DEGRADED' ? day * 45 : 0));
 
+        const probeMode = sample === 2 || sample === 6 ? 'HEAVY' : 'LIGHT';
         metrics.push({
           keySlug: keyRecord.slug,
           balance,
@@ -279,6 +282,8 @@ function buildMetrics(keys: DemoKeyRecord[], referenceDate: Date): DemoMetricRec
           modelTestLatMs: latency === null ? null : latency + 80,
           streamTps: latency === null ? null : round(Math.max(4, 42 - latency / 80 + variation)),
           streamFirstLat: latency === null ? null : latency + 110,
+          probeMode,
+          testModel: probeMode === 'HEAVY' ? keyRecord.testModel : null,
           success: !failed,
           errorMessage: failed ? keyRecord.lastError : null,
           recordedAt,
@@ -364,7 +369,7 @@ export function buildDemoDataset(
       lastLatencyMs: template.latency,
       lastCollectedAt: synced ? new Date(now.getTime() - (index % 4) * 15 * 60 * 1000) : null,
       lastError: template.lastError || null,
-      testModel: template.testModel || null,
+      testModel: template.testModel || parent.testModel,
       enabled: true,
     };
   });
@@ -389,7 +394,7 @@ export function buildDemoDataset(
       test_model: 'gpt-4o-mini',
       test_timeout_ms: '30000',
       retention_days: '30',
-      auto_monitor_enabled: 'true',
+      auto_monitor_enabled: 'false',
       timezone: 'Asia/Shanghai',
       cron_secret: options.cronSecret?.trim() || 'demo-cron-secret-change-me',
       demo_mode: 'true',

@@ -1,4 +1,4 @@
-// Relay Status Monitor - 中转站状态监控系统数据模型（多分组版）
+// RelayScope - AI API 监测台数据模型（多分组版）
 generator client {
   provider = "prisma-client-js"
 }

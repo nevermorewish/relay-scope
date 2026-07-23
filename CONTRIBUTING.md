@@ -1,10 +1,10 @@
 # 贡献指南
 
-感谢参与 Relay Status Monitor。提交改动前，请先阅读 [README](README.md) 和 [系统架构](docs/architecture.md)。
+感谢参与 RelayScope。提交改动前，请先阅读 [README](README.md) 和 [系统架构](docs/architecture.md)。
 
 ## 开发环境
 
-需要 Node.js 20 LTS 与 pnpm 10（或更高版本）。默认使用 SQLite，无需独立数据库服务。复制 `.env.example` 为 `.env.local`，填写 `APP_ENCRYPTION_KEY`、`ADMIN_PASSWORD` 与 `DATABASE_URL`，然后执行：
+需要 Node.js 22.5 或更高版本，并使用项目固定的 pnpm 11.9.0。默认使用 SQLite，无需独立数据库服务。复制 `.env.example` 为 `.env.local`，填写 `APP_ENCRYPTION_KEY`、`ADMIN_PASSWORD` 与 `DATABASE_URL`，然后执行：
 
 ```bash
 pnpm install

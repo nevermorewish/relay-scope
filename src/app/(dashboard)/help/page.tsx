@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-const GITHUB_URL = 'https://github.com/dante1007108174-droid/relay-status-monitor';
+const GITHUB_URL = 'https://github.com/dante1007108174-droid/relay-scope';
 
 interface HelpSectionDefinition {
   id: string;

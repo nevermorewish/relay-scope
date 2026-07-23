@@ -1,91 +1,193 @@
-# 中转站监控
+# RelayScope
 
-面向个人自用的 AI API 中转站监控面板。支持 New API、SUB2API 和通用 OpenAI Compatible 站点，自动比较价格、倍率、余额、真实生成成功率、平均延迟和最近探测状态。官方版本只建议在本机或可信内网运行，不建议把面板直接暴露到公网。
+**自托管的 AI API、中转站与模型服务监测面板。**
 
-基于 [relay-status-monitor](https://github.com/yigehaozi/relay-status-monitor)（MIT）二次开发，见 [LICENSE](./LICENSE)。
+RelayScope 面向需要同时使用多个 AI API 的个人和小团队，集中查看余额、人民币成本、价格倍率、真实生成成功率、平均延迟、模型状态和告警。支持 New API、SUB2API 与通用 OpenAI Compatible 服务，适用于中转站监测、模型 API 监测和大模型接口可用性检查。
 
+> [!IMPORTANT]
+> RelayScope 会在本机保存 API 凭证和账户数据。官方配置只建议在个人电脑或可信内网运行，不建议把管理面板直接暴露到公网。
 
-## 本地运行
+![RelayScope 总览](docs/screenshots/desktop/dashboard.png)
 
-要求 Node.js 22.5 或更高版本，并使用项目固定的 pnpm 11.9.0。初始化脚本依赖 Node 内置 SQLite，Node 20 无法运行。
+## 功能
 
-```bash
-cp .env.example .env.local
-# 编辑 .env.local，替换 APP_ENCRYPTION_KEY、CRON_SECRET 和 ADMIN_PASSWORD
-pnpm install
-pnpm db:generate
-pnpm db:init
-pnpm dev
-```
+- **多站点统一比较**：按站点、分组和模型筛选，比较人民币价格、倍率、余额、成功率与延迟。
+- **低成本真实测试**：轻量检查不发送生成请求；真实测试只生成极少 Token，并在同一 API 凭证上自动串行。
+- **多分组与多模型**：一个站点可配置多套 API Key，每个分组可轮换监测多个模型。
+- **动态价格观测**：支持官方价格、充值比例和分组倍率计算，也能根据 New API/A6API 消费日志还原动态路由价格。
+- **状态与告警**：区分轻量连通异常和真实模型失败，跟踪恢复，并支持飞书 Webhook。
+- **本地数据与备份**：SQLite 单文件存储，按保留天数清理历史，提供一致性快照备份。
+- **响应式界面**：支持浅色/深色主题、桌面端和移动端查看。
 
-Windows PowerShell 可使用 `Copy-Item .env.example .env.local`。`APP_ENCRYPTION_KEY` 应使用至少 32 位的独立随机值，不能继续使用示例占位文本。
+## 界面预览
 
-默认打开 [http://localhost:3000](http://localhost:3000)。本地配置默认启用免登录模式，数据库保存在 `prisma/dev.db`，不需要 PostgreSQL。
+所有截图均由虚构演示数据生成，不包含真实站点、余额或 API Key。
+
+| 上游管理 | 站点详情 |
+| --- | --- |
+| ![RelayScope 上游管理](docs/screenshots/desktop/upstreams.png) | ![RelayScope 站点详情](docs/screenshots/desktop/upstream-detail.png) |
+
+| 告警事件 | 系统设置 |
+| --- | --- |
+| ![RelayScope 告警事件](docs/screenshots/desktop/incidents.png) | ![RelayScope 系统设置](docs/screenshots/desktop/settings.png) |
+
+<details>
+<summary>查看内置使用帮助</summary>
+
+![RelayScope 使用帮助](docs/screenshots/desktop/help.png)
+
+</details>
+
+<details>
+<summary>查看移动端界面</summary>
+
+| 总览 | 上游管理 | 告警事件 |
+| --- | --- | --- |
+| ![移动端总览](docs/screenshots/mobile/dashboard.png) | ![移动端上游管理](docs/screenshots/mobile/upstreams.png) | ![移动端告警](docs/screenshots/mobile/incidents.png) |
+
+</details>
+
+## Windows 快速开始
+
+要求：Windows 10/11、[Node.js 22.5 或更高版本](https://nodejs.org/)和可访问 npm 的网络。
+
+1. 在 GitHub Release 下载并解压 Source code。
+2. 双击 `Setup RelayScope.cmd`。
+3. 脚本会生成仅保存在本机的随机密钥、安装依赖、初始化 SQLite、完成生产构建并打开网页。
+4. 以后双击 `Start RelayScope.cmd` 即可启动服务并打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。
+
+首次安装脚本不会打印生成的密钥，也不会覆盖已有 `.env.local` 或数据库。项目移动到其他目录后无需重新配置；如删除依赖或升级代码，可重新运行安装脚本。
 
 ## Docker
 
-复制 `.env.docker.example` 为 `.env`，替换密钥后运行：
+要求：Docker Desktop 或 Docker Engine with Compose。
 
 ```bash
-docker compose up -d
+cp .env.docker.example .env
+# 将 .env 中两个占位值替换为彼此不同的随机字符串
+docker compose up -d --build
 ```
 
-应用默认只监听本机 `http://127.0.0.1:3000`，SQLite 数据保存在 Docker volume `monitor_data`。如需可信内网访问，部署者需要自行修改端口绑定并启用登录保护。
+Windows PowerShell 可使用：
+
+```powershell
+Copy-Item .env.docker.example .env
+docker compose up -d --build
+```
+
+打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。SQLite 数据保存在 Docker volume `monitor_data`，应用默认只监听本机地址。
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+不要在需要保留数据时执行 `docker compose down -v`，它会删除数据卷。
+
+## macOS、Linux 与手动安装
+
+项目固定使用 pnpm 11.9.0：
+
+```bash
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
+cp .env.example .env.local
+# 编辑 .env.local，替换 APP_ENCRYPTION_KEY、CRON_SECRET 和 ADMIN_PASSWORD
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:init
+pnpm build
+pnpm start
+```
+
+开发模式使用 `pnpm dev`。生产使用应先执行 `pnpm build`，再运行 `pnpm start`。
 
 ## 使用流程
 
-1. 在“上游管理”添加站点，选择 New API、SUB2API 或 OpenAI 兼容类型。
-2. 编辑站点并添加专用监测 Key，设置该分组使用的测试模型。New API 站点新增分组时会自动继承本站已保存的余额访问令牌和用户 ID；新增并启用的模型保存后会立即执行一次真实测试。
-3. 先执行一次完整测试，确认模型列表、流式响应和余额接口兼容。
-4. 在“模型价格”自动同步 New API 价格；其他站点手工录入输入、输出和缓存价格。
-5. 启动网站服务后会自动开始监测，停止网站服务后监测也随之停止；真实生成探测频率在设置页配置，默认每 15 分钟执行。
+1. 在“上游管理”添加站点，填写名称、API 地址和充值比例。
+2. 为站点添加分组、专用监测 API Key 和至少一个模型。
+3. 执行单模型测试，确认模型名称、流式响应和凭证兼容。
+4. 根据需要补充 Access Token 与用户 ID，以读取部分 New API 平台的余额、日志和动态倍率。
+5. 开启自动监测。网站服务停止后，本机调度也会随之停止。
+
+页面内置“使用帮助”，包含配置关系、测试成本、价格公式、状态口径、告警、备份和常见问题。
+
+## 监测与 Token 消耗
+
+| 类型 | 默认频率 | 内容 | 模型 Token |
+| --- | --- | --- | --- |
+| 轻量检查 | 每分钟 | 余额、模型列表、基础连通性 | 不发送生成请求 |
+| 自动真实测试 | 每 15 分钟 | 每个启用分组轮换测试一个模型 | 少量 |
+| 手动模型测试 | 用户点击 | 指定凭证与模型的真实生成 | 少量 |
+
+真实请求最多生成 5 Token。不同 API 凭证可以并行，同一站点地址与 API Key 的任务会自动排队，避免自身并发冲突。
 
 ## 指标口径
 
-- 轻量探测：余额与 `/v1/models`，不发送生成请求。
-- 真实生成探测：发送一次最多生成 5 Token 的短请求，同时记录成功率和完整响应延迟。
-- 模型恢复：模型真实测试失败后保持异常；每分钟余额和模型列表检查不能将其标记为恢复，只有该模型下一次真实测试成功才恢复。
-- 站点详情：分组卡片显示最近一次真实模型测试的延迟和时间，手动单模型测试完成后立即更新。
-- 延迟：界面统一以秒显示；内部仍以毫秒保存和计算。真实模型测试默认等待 30 秒后才判定超时，可在系统设置中调整。
-- 测试并发：不同 API 凭证可并行执行；相同站点地址与 API Key 的任务自动排队，手动测试不会再被其他站点的自动检测阻塞。
-- 价格：输入、输出、缓存读取和缓存写入均按每 100 万 Token 保存。
-- SUB2API 自动测价：累计 Token 或 `actual_cost` 变化时才保存记录，按初始基准自动验证倍率和实付价格；变化超过 5% 生成事件。
-- 总览：可使用默认顺序，或按价格、成功率、延迟、倍率和余额排序；支持分页，并可按住整行实时拖动调整默认顺序（顺序保存在当前浏览器）。
-- 使用帮助：页面内提供快速开始、配置关系、测试成本、价格计算、状态告警、备份安全和常见问题，并链接到 GitHub 完整部署文档。
-- 数据清理：每天自动删除超过设置中“数据保留天数”的探测明细、旧计价记录和已结束告警，并始终保留每个模型最新的计价依据。
+- **余额**：站点账户的共享余额，按照“1 元人民币获得的美元额度”统一换算成人民币，不按分组重复相加。
+- **价格**：输入、输出、缓存读取和缓存写入均按每 100 万 Token 保存。
+- **人民币价格**：`官方美元价格 × 分组倍率 ÷（1 元人民币获得的美元额度）`。
+- **成功率**：最近 24 小时真实模型测试成功次数占比。
+- **平均延迟**：最近 24 小时真实模型测试的完整响应耗时，界面以秒显示。
+- **模型恢复**：真实测试失败后保持异常，只有同一模型下次真实测试成功才恢复；每分钟轻量检查不能覆盖模型异常。
+- **最近探测**：对应最近一次真实生成测试，不是余额或模型列表检查。
 
-## 安全
+New API/A6API 等动态路由平台会优先读取真实消费日志，还原本次路由的模型、输入、输出、缓存和分组倍率。日志读取本身不消耗模型 Token；实际数据优先于公开价格目录。
 
-公开 GitHub 源码不会上传用户自己的 API 数据；真正需要避免的是把运行中的监测面板、SQLite、环境文件或备份暴露给他人。免登录模式只适合本机或可信内网，不应直接暴露公网。API Key 和 Access Token 使用 AES-256-GCM 加密保存；`APP_ENCRYPTION_KEY` 必须使用至少 32 位随机值，且不能与数据库一起公开。
+## 安全边界
 
-需要恢复登录保护时，将 `AUTH_DISABLED` 和 `NEXT_PUBLIC_AUTH_DISABLED` 设为 `false`，再通过 `pnpm db:seed` 创建管理员。
+- API Key 和 Access Token 使用 `APP_ENCRYPTION_KEY` 经 AES-256-GCM 加密后写入 SQLite。
+- 浏览器常规接口不会返回密钥明文；只有用户显式点击小眼睛时才通过专用端点读取单个凭证。
+- `.env`、`.env.local`、数据库、备份、日志和本地 Agent 目录均不得提交 Git。
+- 默认 Docker 端口绑定为 `127.0.0.1:3000`，免登录模式只适合本机或可信内网。
+- 如果自行改造为公网服务，需要自行启用登录保护、HTTPS、防火墙、访问控制、速率限制和凭证轮换。
 
-本项目采用 MIT 许可证，使用者可以自行修改和部署。若自行改造成远程服务，需要自行负责身份认证、HTTPS、防火墙、访问控制和凭证安全；官方默认配置不以公网托管为目标。
+公开 GitHub 源码不会包含部署者自己的 API 数据；风险来自错误上传运行数据，或把正在运行的管理面板直接暴露给他人。
 
-## 手动备份与恢复
+## 登录保护
 
-Git 只保存源码，不保存 SQLite 数据库、站点凭证或 `.env.local`。需要建立本机完整备份时手动执行：
+本机默认启用免登录模式。需要登录时：
+
+1. 将 `.env.local` 中 `AUTH_DISABLED` 和 `NEXT_PUBLIC_AUTH_DISABLED` 改为 `false`。
+2. 设置安全的 `ADMIN_PASSWORD`。
+3. 执行 `pnpm db:seed` 创建用户名为 `admin` 的管理员。
+4. 重新执行 `pnpm build` 并启动服务。
+
+## 备份与恢复
+
+Git 只保存源码，不保存 SQLite、凭证或本机配置。手动完整备份：
 
 ```bash
 pnpm db:backup
 ```
 
-命令使用 SQLite 一致性快照，在 `backups/<时间>/` 中生成 `dev.db`、`.env.local` 和备份清单。该目录包含可解密 API Key 的完整材料，已被 Git 忽略，仍必须作为敏感数据保管。命令不会自动运行，也不会自动删除旧备份。
+备份位于 Git 忽略的 `backups/<时间>/`，包含 SQLite 一致性快照、`.env.local` 和清单。它同时包含数据库与解密材料，属于敏感数据，不能上传或分享。
 
-恢复时：先停止监测服务，备份当前数据，再用目标备份中的 `dev.db` 替换 `prisma/dev.db`、用 `.env.local` 替换项目根目录同名文件，并移除旧的 `prisma/dev.db-wal` 和 `prisma/dev.db-shm`，然后重新启动服务。
+恢复时：
 
-## 验证
+1. 停止 RelayScope。
+2. 备份当前数据。
+3. 用目标备份的 `dev.db` 替换 `prisma/dev.db`。
+4. 用目标备份的 `.env.local` 替换项目根目录同名文件。
+5. 删除旧的 `prisma/dev.db-wal` 和 `prisma/dev.db-shm`。
+6. 重新启动服务。
+
+## 开发与验证
+
+技术栈：Next.js 14.2.35 App Router、TypeScript、Prisma、SQLite、Tailwind CSS。
 
 ```bash
 pnpm test
 pnpm lint
+pnpm exec tsc --noEmit
 pnpm build
 ```
 
-## License
+架构和扩展边界参见 [docs/architecture.md](docs/architecture.md)，贡献流程参见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题请阅读 [SECURITY.md](SECURITY.md)。
 
-MIT，详见 [LICENSE](LICENSE)。
+## 项目来源与许可证
 
-## 聚合平台动态价格
+RelayScope 基于 [yigehaozi/relay-status-monitor](https://github.com/yigehaozi/relay-status-monitor) 的 MIT 许可代码进行二次开发，并在此基础上扩展了多模型监测、价格与倍率观测、动态路由计价、并发队列、本地备份、帮助文档和响应式管理体验。
 
-New API/A6API 等会动态路由的聚合平台，在重量采集轮到某个模型时读取 `/api/log/self` 中最近一次真实路由日志，按日志里的模型、输出、缓存和分组倍率还原实际价格；日志读取不消耗模型 Token。累计用量中的 `actual_cost` 也可结合内置官方价格反推出该模型的有效倍率，真实日志和实测价格优先于公开价格目录。价格没有变化时不会重复写入，超过 24 小时会刷新一次基准；单次变化达到 5% 会生成价格变化事件，告警直接显示倍率旧值和新值，两位小数相同时不告警。
+本项目继续采用 [MIT License](LICENSE)。你可以自行使用、修改和重新部署，但应保留许可证及原项目版权声明。

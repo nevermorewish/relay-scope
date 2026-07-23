@@ -6,6 +6,7 @@
  */
 import bcrypt from 'bcryptjs';
 import { buildDemoDataset, readDemoSeedEnvironment } from '../src/lib/demo-data';
+import { getOfficialModelPrice } from '../src/lib/official-model-prices';
 
 async function main() {
   // Read the process environment before importing Prisma so project .env files
@@ -97,6 +98,21 @@ async function main() {
           },
         });
         keyIds.set(slug, saved.id);
+
+        if (data.testModel) {
+          const officialPrice = getOfficialModelPrice(data.testModel);
+          await tx.monitoredModel.create({
+            data: {
+              upstreamKeyId: saved.id,
+              modelName: data.testModel,
+              officialInputPrice: officialPrice?.input ?? null,
+              officialOutputPrice: officialPrice?.output ?? null,
+              officialPriceSource: officialPrice ? 'BUILTIN' : 'MANUAL',
+              enabled: true,
+              lastTestedAt: data.lastCollectedAt,
+            },
+          });
+        }
       }
 
       await tx.metric.createMany({

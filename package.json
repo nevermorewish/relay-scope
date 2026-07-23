@@ -1,7 +1,25 @@
 {
-  "name": "relay-status-monitor",
-  "version": "0.3.0",
+  "name": "relayscope",
+  "version": "0.3.1",
+  "description": "Self-hosted AI API relay and LLM provider monitoring dashboard",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dante1007108174-droid/relay-scope.git"
+  },
+  "homepage": "https://github.com/dante1007108174-droid/relay-scope#readme",
+  "bugs": {
+    "url": "https://github.com/dante1007108174-droid/relay-scope/issues"
+  },
+  "keywords": [
+    "ai-api-monitoring",
+    "llm-monitoring",
+    "relay-monitor",
+    "openai-compatible",
+    "new-api",
+    "sub2api",
+    "self-hosted"
+  ],
   "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.5.0"

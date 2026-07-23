@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Button variant="outline" size="icon" aria-label="打开导航菜单" onClick={() => setSidebarOpen(true)}>
             <Menu />
           </Button>
-          <span className="font-semibold">中转站监控</span>
+          <span className="font-semibold">RelayScope</span>
           <ThemeToggleButton />
         </header>
 
@@ -79,8 +79,8 @@ function SidebarContent({
             <Activity className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-sm font-bold leading-tight">中转站监控</div>
-            <div className="truncate text-[10px] text-muted-foreground">Relay Status Monitor</div>
+            <div className="truncate text-sm font-bold leading-tight">RelayScope</div>
+            <div className="truncate text-[10px] text-muted-foreground">AI API 监测台</div>
           </div>
         </div>
         <ThemeToggleButton />

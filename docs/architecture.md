@@ -1,4 +1,4 @@
-# Relay Status Monitor 系统架构
+# RelayScope 系统架构
 
 本文描述公开版本的系统边界、核心数据流和扩展方式。示例名称和地址均为合成内容。
 

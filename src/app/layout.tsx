@@ -4,13 +4,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "中转站监控",
-  description: "上游 AI 中转站状态监控系统",
+  title: "RelayScope · AI API 监测台",
+  description: "自托管的 AI API、中转站与模型服务监测面板",
 };
 
 // 防止主题闪烁：在 HTML 解析前就设置 class
 const themeScript = `
-(function(){try{var t=localStorage.getItem('rsm-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(!t&&d)){document.documentElement.classList.add('dark');}}catch(e){}})();
+(function(){try{var t=localStorage.getItem('relayscope-theme')||localStorage.getItem('rsm-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(!t&&d)){document.documentElement.classList.add('dark');}}catch(e){}})();
 `;
 
 export default function RootLayout({
