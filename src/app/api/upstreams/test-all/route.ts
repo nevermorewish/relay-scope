@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { collectUpstreamsByCredential } from '@/lib/collector';
-import { MonitorBusyError, withMonitorLock } from '@/lib/monitor-runtime';
+import { withMonitorRun } from '@/lib/monitor-runtime';
 
 export async function POST() {
   try {
@@ -11,7 +11,7 @@ export async function POST() {
       include: { keys: { where: { enabled: true } } },
     });
 
-    const results = await withMonitorLock('manual', async () => {
+    const results = await withMonitorRun('manual', async () => {
       const collection = await collectUpstreamsByCredential(upstreams, 'heavy');
       return upstreams.filter((upstream) => upstream.keys.length > 0).map((upstream) => {
         const siteResults = collection.filter((item) => item.upstreamId === upstream.id);
@@ -34,9 +34,6 @@ export async function POST() {
       total: results.reduce((sum, result) => sum + result.total, 0),
     });
   } catch (error) {
-    if (error instanceof MonitorBusyError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
     return NextResponse.json(
       { error: '全部测试失败: ' + (error as Error).message },
       { status: 500 }

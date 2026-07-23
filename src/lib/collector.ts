@@ -15,6 +15,7 @@ import { recordUsagePricing } from './usage-pricing';
 import { runRetentionCleanup } from './retention';
 import { runInConcurrencyLanes } from './concurrency-lanes';
 import { syncDynamicModelPrice } from './dynamic-pricing';
+import { withCredentialLane } from './monitor-runtime';
 
 export type CollectMode = 'light' | 'heavy';
 
@@ -31,6 +32,18 @@ interface LightCollectionResult {
  * 对单个 key 执行采集
  */
 export async function collectOneKey(
+  key: UpstreamKeyWithUpstream,
+  mode: CollectMode,
+  monitoredModelId?: number,
+  lightResultsCache?: Map<string, Promise<LightCollectionResult>>,
+) {
+  return withCredentialLane(
+    credentialLaneKey({ upstream: key.upstream, key }),
+    () => collectOneKeyInLane(key, mode, monitoredModelId, lightResultsCache),
+  );
+}
+
+async function collectOneKeyInLane(
   key: UpstreamKeyWithUpstream,
   mode: CollectMode,
   monitoredModelId?: number,

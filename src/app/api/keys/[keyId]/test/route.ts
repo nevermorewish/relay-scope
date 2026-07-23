@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { collectOneKeyManual } from '@/lib/collector';
-import { MonitorBusyError, withMonitorLock } from '@/lib/monitor-runtime';
+import { withMonitorRun } from '@/lib/monitor-runtime';
 
 interface Params {
   params: Promise<{ keyId: string }>;
@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: Params) {
     if (monitoredModelId != null && !Number.isInteger(monitoredModelId)) {
       return NextResponse.json({ error: '模型 ID 无效' }, { status: 400 });
     }
-    const metric = await withMonitorLock(
+    const metric = await withMonitorRun(
       'manual',
       () => collectOneKeyManual(Number(keyId), monitoredModelId)
     );
@@ -25,9 +25,6 @@ export async function POST(request: Request, { params }: Params) {
     }
     return NextResponse.json(metric);
   } catch (e) {
-    if (e instanceof MonitorBusyError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
-    }
     return NextResponse.json({ error: '测试失败: ' + (e as Error).message }, { status: 500 });
   }
 }

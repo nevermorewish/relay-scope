@@ -1,6 +1,6 @@
 import { runCollectCycle } from './collector';
 import { getAutoMonitorEnabled } from './settings';
-import { MonitorBusyError, setNextMonitorRun, withMonitorLock } from './monitor-runtime';
+import { AutomaticMonitorAlreadyRunningError, setNextMonitorRun, withMonitorRun } from './monitor-runtime';
 
 const INTERVAL_MS = 60_000;
 
@@ -11,10 +11,10 @@ export async function triggerScheduledCollection() {
   }
 
   try {
-    const result = await withMonitorLock('automatic', runCollectCycle);
+    const result = await withMonitorRun('automatic', runCollectCycle);
     console.log(`[monitor] ${new Date().toISOString()} collected=${result.collected} mode=${result.mode}`);
   } catch (error) {
-    if (!(error instanceof MonitorBusyError)) {
+    if (!(error instanceof AutomaticMonitorAlreadyRunningError)) {
       console.error('[monitor] collection failed:', error instanceof Error ? error.message : error);
     }
   } finally {

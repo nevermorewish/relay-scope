@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { collectUpstreamKeys } from '@/lib/collector';
-import { MonitorBusyError, withMonitorLock } from '@/lib/monitor-runtime';
+import { withMonitorRun } from '@/lib/monitor-runtime';
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -22,7 +22,7 @@ export async function POST(_req: Request, { params }: Params) {
       return NextResponse.json({ error: '该上游没有启用的分组 Key' }, { status: 400 });
     }
 
-    const collection = await withMonitorLock(
+    const collection = await withMonitorRun(
       'manual',
       () => collectUpstreamKeys(upstream, 'heavy')
     );
@@ -35,9 +35,6 @@ export async function POST(_req: Request, { params }: Params) {
 
     return NextResponse.json({ ok: true, status: collection.status, results: summary });
   } catch (e) {
-    if (e instanceof MonitorBusyError) {
-      return NextResponse.json({ error: e.message }, { status: 409 });
-    }
     return NextResponse.json({ error: '测试失败: ' + (e as Error).message }, { status: 500 });
   }
 }

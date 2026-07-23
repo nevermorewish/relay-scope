@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runCollectCycle } from '@/lib/collector';
 import { getCronSecret } from '@/lib/settings';
+import { AutomaticMonitorAlreadyRunningError, withMonitorRun } from '@/lib/monitor-runtime';
 
 /**
  * 定时采集入口
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
-    const result = await runCollectCycle();
+    const result = await withMonitorRun('automatic', runCollectCycle);
     const elapsed = Date.now() - start;
     return NextResponse.json({
       ok: true,
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
       time: new Date().toISOString(),
     });
   } catch (e) {
+    if (e instanceof AutomaticMonitorAlreadyRunningError) {
+      return NextResponse.json({ ok: true, skipped: true, reason: e.message });
+    }
     return NextResponse.json(
       { ok: false, error: (e as Error).message },
       { status: 500 }

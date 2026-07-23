@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS "Upstream" (
   "status" TEXT NOT NULL DEFAULT 'UNKNOWN',
   "enabled" INTEGER NOT NULL DEFAULT 1,
   "priority" INTEGER NOT NULL DEFAULT 0,
+  "creditUsdPerCny" REAL NOT NULL DEFAULT 1,
   "testModel" TEXT,
   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -44,6 +45,15 @@ CREATE TABLE IF NOT EXISTS "Metric" (
   "probeMode" TEXT NOT NULL DEFAULT 'LIGHT', "testModel" TEXT, "errorCode" TEXT,
   "success" INTEGER NOT NULL DEFAULT 0, "errorMessage" TEXT,
   "recordedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS "MonitoredModel" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "upstreamKeyId" INTEGER NOT NULL REFERENCES "UpstreamKey"("id") ON DELETE CASCADE,
+  "modelName" TEXT NOT NULL, "officialInputPrice" REAL, "officialOutputPrice" REAL,
+  "officialPriceSource" TEXT NOT NULL DEFAULT 'MANUAL', "enabled" INTEGER NOT NULL DEFAULT 1,
+  "lastTestedAt" DATETIME, "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("upstreamKeyId", "modelName")
 );
 CREATE TABLE IF NOT EXISTS "PriceSnapshot" (
   "id" INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -98,6 +108,7 @@ CREATE INDEX IF NOT EXISTS "Price_upstream_model_recorded_idx" ON "PriceSnapshot
 CREATE INDEX IF NOT EXISTS "Price_key_model_recorded_idx" ON "PriceSnapshot"("upstreamKeyId", "modelName", "recordedAt");
 CREATE INDEX IF NOT EXISTS "Usage_key_model_recorded_idx" ON "UsageSnapshot"("upstreamKeyId", "modelName", "recordedAt");
 CREATE INDEX IF NOT EXISTS "Usage_upstream_recorded_idx" ON "UsageSnapshot"("upstreamId", "recordedAt");
+CREATE INDEX IF NOT EXISTS "MonitoredModel_key_enabled_tested_idx" ON "MonitoredModel"("upstreamKeyId", "enabled", "lastTestedAt");
 CREATE INDEX IF NOT EXISTS "Incident_upstream_resolved_created_idx" ON "Incident"("upstreamId", "resolved", "createdAt");
 CREATE INDEX IF NOT EXISTS "Incident_key_resolved_created_idx" ON "Incident"("upstreamKeyId", "resolved", "createdAt");
 `);
