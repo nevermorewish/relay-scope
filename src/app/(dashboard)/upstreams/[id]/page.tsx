@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
 import { resolvedIncidentLabel } from '@/lib/incident-semantics';
+import { formatLatencySeconds, latencySecondsValue, normalizeLatencyMessage } from '@/lib/latency-display';
 
 // ============ 类型 ============
 
@@ -48,6 +49,9 @@ interface UpstreamKey {
   lastBalance: number | null;
   lastLatencyMs: number | null;
   lastCollectedAt: string | null;
+  latestModelTestLatencyMs: number | null;
+  latestModelTestAt: string | null;
+  latestModelTestModel: string | null;
   lastError: string | null;
   hasApiKey: boolean;
   hasAccessToken: boolean;
@@ -135,8 +139,8 @@ export default function UpstreamDetailPage() {
     const id = params.id;
     try {
       const [uRes, iRes] = await Promise.all([
-        fetch(`/api/upstreams/${id}`),
-        fetch(`/api/incidents?upstreamId=${id}&limit=50`),
+        fetch(`/api/upstreams/${id}`, { cache: 'no-store' }),
+        fetch(`/api/incidents?upstreamId=${id}&limit=50`, { cache: 'no-store' }),
       ]);
       const [nextUpstream, nextIncidents] = await Promise.all([
         uRes.json().catch(() => ({})),
@@ -169,7 +173,7 @@ export default function UpstreamDetailPage() {
       return true;
     }
     const qs = currentRange === '7d' ? 'days=7' : `hours=${currentRange === '6h' ? 6 : 24}`;
-    const mRes = await fetch(`/api/metrics?upstreamKeyId=${keyId}&${qs}&limit=2000`);
+    const mRes = await fetch(`/api/metrics?upstreamKeyId=${keyId}&${qs}&limit=2000`, { cache: 'no-store' });
     const nextMetrics = await mRes.json().catch(() => []);
     if (!mRes.ok) throw new Error(nextMetrics.error || '获取指标失败');
     if (!isCurrent()) return false;
@@ -232,8 +236,19 @@ export default function UpstreamDetailPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || data.errorMessage || `${modelName} 测试失败`);
       }
-      const latency = data.modelTestLatMs != null ? `，延迟 ${data.modelTestLatMs}ms` : '';
+      const latency = data.modelTestLatMs != null ? `，延迟 ${formatLatencySeconds(data.modelTestLatMs)}` : '';
       toast.success(`${modelName} 测试成功${latency}`, { id: tid });
+      setUpstream((current) => current ? {
+        ...current,
+        keys: current.keys?.map((key) => key.id === keyId ? {
+          ...key,
+          lastLatencyMs: data.latencyMs ?? key.lastLatencyMs,
+          lastCollectedAt: data.recordedAt ?? key.lastCollectedAt,
+          latestModelTestLatencyMs: data.modelTestLatMs ?? null,
+          latestModelTestAt: data.recordedAt ?? new Date().toISOString(),
+          latestModelTestModel: data.testModel ?? modelName,
+        } : key),
+      } : current);
       await fetchBase();
       if (activeKeyIdRef.current === String(keyId)) await fetchMetrics();
     } catch (error) {
@@ -335,7 +350,7 @@ export default function UpstreamDetailPage() {
       ? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
       : { hour: '2-digit', minute: '2-digit' }),
     balance: convertUsdCreditToCny(m.balance, upstream?.creditUsdPerCny),
-    latency: m.latencyMs,
+    latency: m.latencyMs == null ? null : latencySecondsValue(m.latencyMs),
     success: m.success ? 1 : 0,
   })), [metrics, range, upstream?.creditUsdPerCny]);
   const balanceChartData = useMemo(
@@ -586,7 +601,7 @@ export default function UpstreamDetailPage() {
 
                   {/* 延迟趋势 */}
                   <div className="trend-chart min-w-0" onMouseDown={preventChartFocus}>
-                    <div className="mb-2 text-sm font-medium">基础接口延迟（毫秒）</div>
+                    <div className="mb-2 text-sm font-medium">基础接口延迟（秒）</div>
                     {latencyChartData.length === 0 ? (
                       <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
                         所选范围内暂无延迟数据
@@ -602,7 +617,7 @@ export default function UpstreamDetailPage() {
                         <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={40} />
                         <YAxis tick={{ fontSize: 11 }} />
                         <Tooltip
-                          formatter={(v) => (typeof v === 'number' && v != null ? `${v}ms` : '—')}
+                          formatter={(v) => (typeof v === 'number' && v != null ? `${v.toFixed(2)}秒` : '—')}
                           contentStyle={tooltipStyle}
                           labelStyle={tooltipLabelStyle}
                           itemStyle={tooltipItemStyle}
@@ -649,7 +664,7 @@ export default function UpstreamDetailPage() {
                             </Badge>
                           )}
                         </div>
-                        <div className="mt-1 break-words text-sm">{inc.message}</div>
+                        <div className="mt-1 break-words text-sm">{normalizeLatencyMessage(inc.message)}</div>
                       </div>
                       <span className="whitespace-nowrap text-xs text-muted-foreground">
                         {new Date(inc.createdAt).toLocaleString('zh-CN')}
@@ -774,7 +789,7 @@ function GroupCard({ k, upstreamType, testingModelId, testDisabled, deleting, on
               <Timer className="h-3 w-3" />最近检测延迟
             </div>
             <div className="mt-0.5 font-mono text-sm font-semibold">
-              {k.lastLatencyMs != null ? `${k.lastLatencyMs}ms` : '—'}
+              {formatLatencySeconds(k.latestModelTestLatencyMs)}
             </div>
           </div>
           <div className="border-l pl-3">
@@ -782,8 +797,8 @@ function GroupCard({ k, upstreamType, testingModelId, testDisabled, deleting, on
               <Activity className="h-3 w-3" />最近检测
             </div>
             <div className="mt-0.5 text-sm font-semibold">
-              {k.lastCollectedAt
-                ? new Date(k.lastCollectedAt).toLocaleString('zh-CN', {
+              {k.latestModelTestAt
+                ? new Date(k.latestModelTestAt).toLocaleString('zh-CN', {
                     month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
                   })
                 : '暂无记录'}

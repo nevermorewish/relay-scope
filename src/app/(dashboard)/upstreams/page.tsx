@@ -24,6 +24,7 @@ import { buildUpstreamListSearchParams } from '@/lib/upstream-query';
 import { PageHeader } from '@/components/page-header';
 import { getOfficialModelPrice } from '@/lib/official-model-prices';
 import { findNewEnabledModels, runNewModelTests } from '@/lib/new-model-testing';
+import { formatLatencySeconds } from '@/lib/latency-display';
 
 type UpstreamKey = UpstreamKeyRow;
 type Upstream = UpstreamRow;
@@ -779,7 +780,7 @@ function KeyManager({ upstreamId, type, onEditKey }: {
         toast.error(`${group}: ${data.error}`, { id: tid });
       } else if (data.modelTestOk === true) {
         const latency = data.modelTestLatMs ?? data.latencyMs;
-        toast.success(`${group}: API 测试成功${latency != null ? `，延迟 ${latency}ms` : ''}`, { id: tid });
+        toast.success(`${group}: API 测试成功${latency != null ? `，延迟 ${formatLatencySeconds(latency)}` : ''}`, { id: tid });
       } else {
         toast.error(`${group}: API 测试失败${data.errorMessage ? `，${data.errorMessage}` : ''}`, { id: tid });
       }

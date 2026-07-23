@@ -14,6 +14,7 @@ import {
   resolvedIncidentLabel,
   resolvedIncidentTimeLabel,
 } from '@/lib/incident-semantics';
+import { normalizeLatencyMessage } from '@/lib/latency-display';
 
 interface Incident {
   id: number;
@@ -148,7 +149,7 @@ export default function IncidentsPage() {
                       </Badge>
                     )}
                   </div>
-                  <div className="text-sm text-foreground">{inc.message}</div>
+                  <div className="text-sm text-foreground">{normalizeLatencyMessage(inc.message)}</div>
                   <div className="text-xs text-muted-foreground">
                     {new Date(inc.createdAt).toLocaleString('zh-CN')}
                     {inc.resolvedAt != null &&

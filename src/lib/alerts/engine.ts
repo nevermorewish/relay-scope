@@ -6,6 +6,7 @@ import type { IncidentType } from '@/lib/domain-types';
 import { prisma } from '../db';
 import { sendNotification } from './channels/feishu';
 import { canAutoResolveIncident } from '../incident-semantics';
+import { formatLatencySeconds } from '../latency-display';
 
 interface EvalResult {
   rule: AlertRule;
@@ -81,7 +82,7 @@ async function evaluateRule(rule: AlertRule, key: KeyWithContext): Promise<EvalR
       if (value === null) return base;
       const triggered = rule.operator === 'gt' ? value > rule.threshold : value < rule.threshold;
       return { ...base, triggered, currentValue: value, incidentType: 'LATENCY_HIGH',
-        message: `[${display}] 延迟 ${value}ms ${rule.operator === 'gt' ? '高于' : '低于'} 阈值 ${rule.threshold}ms` };
+        message: `[${display}] 延迟 ${formatLatencySeconds(value)} ${rule.operator === 'gt' ? '高于' : '低于'}阈值 ${formatLatencySeconds(rule.threshold)}` };
     }
     case 'consecutive_failures': {
       const recent = await prisma.metric.findMany({

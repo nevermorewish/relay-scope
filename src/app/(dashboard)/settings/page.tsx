@@ -48,6 +48,7 @@ import { resolveRuleNumberDraft } from '@/lib/rule-number-draft';
 import { buildCronCommand } from '@/lib/cron-command';
 import { buildSettingsUpdatePayload } from '@/lib/settings-form';
 import { toast } from 'sonner';
+import { latencyThresholdForDisplay, latencyThresholdForStorage } from '@/lib/latency-display';
 
 interface AlertRule {
   id: number;
@@ -72,12 +73,25 @@ type NumericRuleField = 'threshold' | 'cooldownMin';
 type RuleDraft = Record<NumericRuleField, string>;
 type RuleDrafts = Record<number, RuleDraft>;
 
+function ruleFieldDisplayValue(rule: AlertRule, field: NumericRuleField): number {
+  const value = rule[field];
+  return field === 'threshold' && rule.metric === 'latency'
+    ? latencyThresholdForDisplay(value)
+    : value;
+}
+
+function ruleFieldStorageValue(rule: AlertRule, field: NumericRuleField, value: number): number {
+  return field === 'threshold' && rule.metric === 'latency'
+    ? latencyThresholdForStorage(value)
+    : value;
+}
+
 function createRuleDrafts(rules: AlertRule[]): RuleDrafts {
   return Object.fromEntries(
     rules.map((rule) => [
       rule.id,
       {
-        threshold: String(rule.threshold),
+        threshold: String(ruleFieldDisplayValue(rule, 'threshold')),
         cooldownMin: String(rule.cooldownMin),
       },
     ])
@@ -187,7 +201,7 @@ function RulesTab() {
     setDrafts((current) => ({
       ...current,
       [rule.id]: {
-        threshold: current[rule.id]?.threshold ?? String(rule.threshold),
+        threshold: current[rule.id]?.threshold ?? String(ruleFieldDisplayValue(rule, 'threshold')),
         cooldownMin: current[rule.id]?.cooldownMin ?? String(rule.cooldownMin),
         [field]: value,
       },
@@ -195,19 +209,19 @@ function RulesTab() {
   }
 
   async function commitRuleDraft(rule: AlertRule, field: NumericRuleField) {
-    const serverValue = rule[field];
-    const currentDraft = drafts[rule.id]?.[field] ?? String(serverValue);
-    const resolved = resolveRuleNumberDraft(currentDraft, serverValue);
+    const displayServerValue = ruleFieldDisplayValue(rule, field);
+    const currentDraft = drafts[rule.id]?.[field] ?? String(displayServerValue);
+    const resolved = resolveRuleNumberDraft(currentDraft, displayServerValue);
 
     updateRuleDraft(rule, field, resolved.draft);
-    if (resolved.value == null || resolved.value === serverValue) return;
+    if (resolved.value == null || resolved.value === displayServerValue) return;
 
     setUpdatingId(rule.id);
     try {
       const res = await fetch(`/api/alert-rules/${rule.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: resolved.value }),
+        body: JSON.stringify({ [field]: ruleFieldStorageValue(rule, field, resolved.value) }),
       });
       if (!res.ok) throw new Error('更新失败');
 
@@ -216,12 +230,12 @@ function RulesTab() {
       setDrafts((current) => ({
         ...current,
         [updatedRule.id]: {
-          threshold: String(updatedRule.threshold),
+          threshold: String(ruleFieldDisplayValue(updatedRule, 'threshold')),
           cooldownMin: String(updatedRule.cooldownMin),
         },
       }));
     } catch {
-      updateRuleDraft(rule, field, String(serverValue));
+      updateRuleDraft(rule, field, String(displayServerValue));
     } finally {
       setUpdatingId(null);
     }
@@ -660,12 +674,13 @@ function SystemTab() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="test-timeout" label="测试超时（ms）">
+            <Field id="test-timeout" label="测试超时（秒）">
               <Input
                 id="test-timeout"
                 type="number"
-                value={settings.test_timeout_ms != null ? settings.test_timeout_ms : '15000'}
-                onChange={(e) => update('test_timeout_ms', e.target.value)}
+                min={1}
+                value={timeoutSecondsInput(settings.test_timeout_ms)}
+                onChange={(e) => update('test_timeout_ms', timeoutMillisecondsInput(e.target.value))}
               />
             </Field>
             <Field id="retention-days" label="数据保留（天）">
@@ -915,9 +930,21 @@ function SeverityBadge({ severity }: { severity: string }) {
 function metricLabel(metric: string): string {
   const map: Record<string, string> = {
     balance: '余额($)',
-    latency: '延迟(ms)',
+    latency: '延迟（秒）',
     consecutive_failures: '连续失败次数',
     availability: '可用率(%)',
   };
   return map[metric] || metric;
+}
+
+function timeoutSecondsInput(milliseconds?: string): string {
+  if (milliseconds === '') return '';
+  const value = Number(milliseconds ?? '30000');
+  return Number.isFinite(value) ? String(value / 1000) : '30';
+}
+
+function timeoutMillisecondsInput(seconds: string): string {
+  if (seconds === '') return '';
+  const value = Number(seconds);
+  return Number.isFinite(value) ? String(value * 1000) : '';
 }

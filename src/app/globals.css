@@ -104,3 +104,8 @@
   outline: none !important;
   box-shadow: none !important;
 }
+
+.dashboard-row-dragging,
+.dashboard-row-dragging * {
+  cursor: grabbing !important;
+}

@@ -40,6 +40,33 @@ export function sortDashboardItems<T extends SortableDashboardItem>(
   });
 }
 
+export function applyDashboardItemOrder<T extends SortableDashboardItem>(
+  items: T[],
+  orderedIds: string[],
+): T[] {
+  if (orderedIds.length === 0) return [...items];
+  const order = new Map(orderedIds.map((id, index) => [id, index]));
+  const fallback = new Map(items.map((item, index) => [dashboardItemId(item), index]));
+  return [...items].sort((left, right) => {
+    const leftOrder = order.get(dashboardItemId(left));
+    const rightOrder = order.get(dashboardItemId(right));
+    if (leftOrder == null) return rightOrder == null ? (fallback.get(dashboardItemId(left)) ?? 0) - (fallback.get(dashboardItemId(right)) ?? 0) : 1;
+    if (rightOrder == null) return -1;
+    return leftOrder - rightOrder;
+  });
+}
+
+export function moveDashboardItem(orderedIds: string[], draggedId: string, targetId: string): string[] {
+  if (draggedId === targetId) return orderedIds;
+  const from = orderedIds.indexOf(draggedId);
+  const to = orderedIds.indexOf(targetId);
+  if (from < 0 || to < 0) return orderedIds;
+  const next = [...orderedIds];
+  next.splice(from, 1);
+  next.splice(to, 0, draggedId);
+  return next;
+}
+
 function priceValue(item: SortableDashboardItem) {
   return item.price?.inputPrice ?? item.price?.outputPrice ?? null;
 }

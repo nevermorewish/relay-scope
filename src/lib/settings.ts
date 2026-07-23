@@ -75,7 +75,7 @@ export async function getCollectConfig() {
     getSettingNumber(SettingKeys.LIGHT_INTERVAL_MIN, 1),
     getSettingNumber(SettingKeys.HEAVY_INTERVAL_MIN, 15),
     getSetting(SettingKeys.TEST_MODEL, 'gpt-4o-mini'),
-    getSettingNumber(SettingKeys.TEST_TIMEOUT_MS, 15000),
+    getSettingNumber(SettingKeys.TEST_TIMEOUT_MS, 30000),
     getSettingNumber(SettingKeys.RETENTION_DAYS, 30),
   ]);
   return { lightMin, heavyMin, testModel, timeoutMs, retentionDays };

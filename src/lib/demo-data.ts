@@ -387,7 +387,7 @@ export function buildDemoDataset(
       light_interval_minutes: '1',
       heavy_interval_minutes: '15',
       test_model: 'gpt-4o-mini',
-      test_timeout_ms: '15000',
+      test_timeout_ms: '30000',
       retention_days: '30',
       auto_monitor_enabled: 'true',
       timezone: 'Asia/Shanghai',

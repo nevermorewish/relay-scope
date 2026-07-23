@@ -15,11 +15,21 @@ export async function GET(_req: Request, { params }: Params) {
   if (!upstream) {
     return NextResponse.json({ error: '上游不存在' }, { status: 404 });
   }
+  const latestModelTests = await Promise.all(upstream.keys.map((key) => (
+    prisma.metric.findFirst({
+      where: { upstreamKeyId: key.id, probeMode: 'HEAVY' },
+      orderBy: { recordedAt: 'desc' },
+      select: { modelTestLatMs: true, recordedAt: true, testModel: true },
+    })
+  )));
   // 处理 keys 的凭证标志
-  const keys = upstream.keys.map(({ apiKeyEnc, accessTokenEnc, ...rest }) => ({
+  const keys = upstream.keys.map(({ apiKeyEnc, accessTokenEnc, ...rest }, index) => ({
     ...rest,
     hasApiKey: !!apiKeyEnc,
     hasAccessToken: !!accessTokenEnc,
+    latestModelTestLatencyMs: latestModelTests[index]?.modelTestLatMs ?? null,
+    latestModelTestAt: latestModelTests[index]?.recordedAt ?? null,
+    latestModelTestModel: latestModelTests[index]?.testModel ?? null,
   }));
   return NextResponse.json({ ...upstream, keys });
 }
