@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
-import { deriveEffectiveMultiplier } from '@/lib/pricing';
+import { deriveDisplayedMultiplier } from '@/lib/pricing';
 import { calculateEffectivePrice } from '@/lib/official-model-prices';
 
 export const dynamic = 'force-dynamic';
@@ -180,10 +180,10 @@ function resolvePrice(
     }
     const divisor = snapshot.currency === 'USD' ? creditUsdPerCny : 1;
     const observedMultiplier = snapshot.currency === 'USD'
-      ? deriveEffectiveMultiplier(snapshot, {
+      ? deriveDisplayedMultiplier(snapshot, {
           input: model.officialInputPrice,
           output: model.officialOutputPrice,
-        })
+        }, creditUsdPerCny)
       : null;
     return {
       currency: snapshot.currency === 'USD' ? 'CNY' : snapshot.currency,
@@ -191,7 +191,7 @@ function resolvePrice(
       outputPrice: snapshot.outputPrice == null ? null : snapshot.outputPrice / divisor,
       cacheReadPrice: snapshot.cacheReadPrice == null ? null : snapshot.cacheReadPrice / divisor,
       source: snapshot.source,
-      multiplier: observedMultiplier == null ? null : Math.round(observedMultiplier / creditUsdPerCny * 10000) / 10000,
+      multiplier: observedMultiplier,
     };
   }
   const inputPrice = calculateEffectivePrice(model.officialInputPrice, multiplier, creditUsdPerCny);

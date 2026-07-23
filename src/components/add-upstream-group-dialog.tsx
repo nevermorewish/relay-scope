@@ -18,6 +18,7 @@ import {
   validateGroupForm,
   type EditableGroupModel,
 } from '@/lib/upstream-group-form';
+import { findNewEnabledModels, runNewModelTests } from '@/lib/new-model-testing';
 
 export interface GroupDialogKey {
   id: number;
@@ -210,6 +211,17 @@ export function AddUpstreamGroupDialog({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '保存失败');
       toast.success(keyData ? '分组已更新' : '分组已创建');
+      const newModels = findNewEnabledModels(keyData?.monitoredModels, data.monitoredModels);
+      if (newModels.length > 0) {
+        const testToast = toast.loading(`正在测试 ${newModels.length} 个新模型…`);
+        const results = await runNewModelTests(data.id, newModels);
+        const failed = results.filter((result) => !result.ok);
+        if (failed.length === 0) {
+          toast.success('新模型测试完成', { id: testToast });
+        } else {
+          toast.warning(`${results.length - failed.length} 个成功，${failed.length} 个失败`, { id: testToast });
+        }
+      }
       onSaved();
     } catch (saveError) {
       setError((saveError as Error).message);

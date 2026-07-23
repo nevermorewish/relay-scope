@@ -17,5 +17,5 @@ export function resolvedIncidentTimeLabel(type: string) {
 }
 
 export function resolveIncidentActionLabel(type: string) {
-  return requiresIncidentAcknowledgement(type) ? '确认已知' : '标记已解决';
+  return requiresIncidentAcknowledgement(type) ? '确认' : '标记已解决';
 }

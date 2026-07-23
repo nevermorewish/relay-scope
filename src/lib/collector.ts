@@ -105,6 +105,9 @@ export async function collectOneKey(
         upstreamId: upstream.id,
         upstreamKeyId: key.id,
         modelName: ctx.testModel,
+        officialInputPrice: monitoredModel?.officialInputPrice,
+        officialOutputPrice: monitoredModel?.officialOutputPrice,
+        creditUsdPerCny: upstream.creditUsdPerCny,
         adapter,
         context: ctx,
       }).catch((error) => {

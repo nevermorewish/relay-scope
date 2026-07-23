@@ -1,7 +1,13 @@
 import type { Prisma } from '@prisma/client';
 import type { AdapterContext, UpstreamAdapter } from './adapters/base';
 import { prisma } from './db';
-import { maxRelativePriceChange } from './pricing';
+import { getOfficialModelPrice } from './official-model-prices';
+import {
+  deriveDisplayedMultiplier,
+  formatMultiplier,
+  hasVisibleMultiplierChange,
+  maxRelativePriceChange,
+} from './pricing';
 
 const PRICE_REFRESH_MS = 24 * 60 * 60 * 1000;
 const PRICE_CHANGE_THRESHOLD = 0.05;
@@ -10,6 +16,9 @@ export async function syncDynamicModelPrice(params: {
   upstreamId: number;
   upstreamKeyId: number;
   modelName: string;
+  officialInputPrice?: number | null;
+  officialOutputPrice?: number | null;
+  creditUsdPerCny: number;
   adapter: UpstreamAdapter;
   context: AdapterContext;
 }) {
@@ -36,6 +45,15 @@ export async function syncDynamicModelPrice(params: {
     orderBy: { recordedAt: 'desc' },
   });
   const relativeChange = previous ? maxRelativePriceChange(previous, price) : null;
+  const catalogPrice = getOfficialModelPrice(params.modelName);
+  const officialPrice = {
+    input: params.officialInputPrice ?? catalogPrice?.input,
+    output: params.officialOutputPrice ?? catalogPrice?.output,
+  };
+  const previousMultiplier = previous
+    ? deriveDisplayedMultiplier(previous, officialPrice, params.creditUsdPerCny)
+    : null;
+  const nextMultiplier = deriveDisplayedMultiplier(price, officialPrice, params.creditUsdPerCny);
   const refreshExpired = !previous || previous.recordedAt.getTime() < Date.now() - PRICE_REFRESH_MS;
   if (previous && relativeChange !== null && relativeChange < 0.0001 && !refreshExpired) {
     return { status: 'unchanged' as const };
@@ -63,15 +81,17 @@ export async function syncDynamicModelPrice(params: {
       },
     });
 
-    if (previous && relativeChange != null && relativeChange >= PRICE_CHANGE_THRESHOLD) {
+    if (previous && relativeChange != null && relativeChange >= PRICE_CHANGE_THRESHOLD
+      && previousMultiplier != null && nextMultiplier != null
+      && hasVisibleMultiplierChange(previousMultiplier, nextMultiplier)) {
       await tx.incident.create({
         data: {
           upstreamId: params.upstreamId,
           upstreamKeyId: params.upstreamKeyId,
           type: 'PRICE_CHANGED',
           severity: 'WARNING',
-          message: `${params.modelName} ${usesActualLog ? '实际路由价格' : '公开参考价格'}变化 ${(relativeChange * 100).toFixed(1)}%`,
-          metricValue: relativeChange * 100,
+          message: `${params.modelName} 倍率从 ${formatMultiplier(previousMultiplier)} 变为 ${formatMultiplier(nextMultiplier)}`,
+          metricValue: nextMultiplier,
         },
       });
     }

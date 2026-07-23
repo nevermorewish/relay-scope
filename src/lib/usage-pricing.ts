@@ -1,6 +1,7 @@
 import type { ModelUsageStats } from './adapters/base';
 import { prisma } from './db';
 import { getOfficialModelPrice } from './official-model-prices';
+import { formatMultiplier, hasVisibleMultiplierChange } from './pricing';
 
 export interface UsagePoint {
   inputTokens: number;
@@ -141,16 +142,15 @@ export async function recordUsagePricing(params: {
           },
         },
       });
-      if (relativeChange >= 0.05) {
+      if (relativeChange >= 0.05 && referenceMultiplier != null
+        && hasVisibleMultiplierChange(referenceMultiplier, roundedMultiplier)) {
         await tx.incident.create({
           data: {
             upstreamId: params.upstreamId,
             upstreamKeyId: params.upstreamKeyId,
             type: 'PRICE_CHANGED',
             severity: 'WARNING',
-            message: referenceMultiplier == null
-              ? `${stat.modelName} 首次测得实际倍率 ${roundedMultiplier.toFixed(4)}`
-              : `${stat.modelName} 实测倍率从 ${referenceMultiplier.toFixed(4)} 变为 ${roundedMultiplier.toFixed(4)}`,
+            message: `${stat.modelName} 倍率从 ${formatMultiplier(referenceMultiplier)} 变为 ${formatMultiplier(roundedMultiplier)}`,
             metricValue: roundedMultiplier,
           },
         });

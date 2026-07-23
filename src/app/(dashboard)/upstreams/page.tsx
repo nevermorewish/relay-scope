@@ -23,6 +23,7 @@ import { AddUpstreamGroupDialog } from '@/components/add-upstream-group-dialog';
 import { buildUpstreamListSearchParams } from '@/lib/upstream-query';
 import { PageHeader } from '@/components/page-header';
 import { getOfficialModelPrice } from '@/lib/official-model-prices';
+import { findNewEnabledModels, runNewModelTests } from '@/lib/new-model-testing';
 
 type UpstreamKey = UpstreamKeyRow;
 type Upstream = UpstreamRow;
@@ -408,6 +409,7 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
       if (!upstream) {
         createdUpstreamId = Number(savedUpstream.id);
         if (!Number.isInteger(createdUpstreamId)) throw new Error('站点已创建，但返回的站点 ID 无效');
+        const modelTestResults: Awaited<ReturnType<typeof runNewModelTests>> = [];
         for (const draft of draftGroups) {
           const keyRes = await fetch(`/api/upstreams/${createdUpstreamId}/keys`, {
             method: 'POST',
@@ -416,6 +418,12 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
           });
           const keyResult = await keyRes.json();
           if (!keyRes.ok) throw new Error(`分组「${draft.group}」创建失败：${keyResult.error || '保存失败'}`);
+          const newModels = findNewEnabledModels(undefined, keyResult.monitoredModels);
+          modelTestResults.push(...await runNewModelTests(keyResult.id, newModels));
+        }
+        const failedTests = modelTestResults.filter((result) => !result.ok);
+        if (failedTests.length > 0) {
+          toast.warning(`站点已创建，新模型测试 ${modelTestResults.length - failedTests.length} 个成功，${failedTests.length} 个失败`);
         }
       }
       toast.success(upstream ? '上游已更新' : '上游及分组已创建');

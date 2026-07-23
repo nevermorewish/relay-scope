@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateNewApiLogPrices, deriveEffectiveMultiplier, maxRelativePriceChange, normalizeNewApiPricing, percentile } from './pricing';
+import {
+  calculateNewApiLogPrices,
+  deriveDisplayedMultiplier,
+  deriveEffectiveMultiplier,
+  formatMultiplier,
+  hasVisibleMultiplierChange,
+  maxRelativePriceChange,
+  normalizeNewApiPricing,
+  percentile,
+} from './pricing';
 
 test('normalizes New API token ratios with group multiplier', () => {
   const prices = normalizeNewApiPricing({
@@ -36,6 +45,18 @@ test('derives a model-level effective multiplier from official prices', () => {
     { inputPrice: 0.06, outputPrice: 0.18 },
     { input: 2, output: 6 },
   ), 0.03);
+});
+
+test('derives and formats the recharge-adjusted multiplier shown on the dashboard', () => {
+  assert.equal(deriveDisplayedMultiplier(
+    { inputPrice: 6, outputPrice: 30 },
+    { input: 3, output: 15 },
+    10,
+  ), 0.2);
+  assert.equal(formatMultiplier(0.2), '0.20');
+  assert.equal(formatMultiplier(0.0325), '0.03');
+  assert.equal(hasVisibleMultiplierChange(0.0214, 0.0161), false);
+  assert.equal(hasVisibleMultiplierChange(0.0128, 0.0214), true);
 });
 
 test('calculates A6 actual route prices from New API log ratios', () => {

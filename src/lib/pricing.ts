@@ -119,3 +119,21 @@ export function deriveEffectiveMultiplier(
   if (!ratios.length || ratios.some((value) => !Number.isFinite(value) || value <= 0)) return null;
   return Math.round((ratios.reduce((sum, value) => sum + value, 0) / ratios.length) * 10000) / 10000;
 }
+
+export function deriveDisplayedMultiplier(
+  price: ComparablePrice,
+  official: { input?: number | null; output?: number | null },
+  creditUsdPerCny: number,
+): number | null {
+  if (!Number.isFinite(creditUsdPerCny) || creditUsdPerCny <= 0) return null;
+  const multiplier = deriveEffectiveMultiplier(price, official);
+  return multiplier == null ? null : Math.round(multiplier / creditUsdPerCny * 10000) / 10000;
+}
+
+export function formatMultiplier(value: number): string {
+  return value.toFixed(2);
+}
+
+export function hasVisibleMultiplierChange(previous: number, next: number): boolean {
+  return formatMultiplier(previous) !== formatMultiplier(next);
+}

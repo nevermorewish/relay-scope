@@ -12,6 +12,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calculateDashboardFilterSummary } from '@/lib/dashboard-filter-summary';
+import {
+  dashboardItemId,
+  sortDashboardItems,
+  type DashboardSortMode,
+} from '@/lib/dashboard-item-order';
 
 interface DashboardItem {
   keyId: number;
@@ -66,6 +71,7 @@ export default function DashboardPage() {
   const [siteFilter, setSiteFilter] = useState('ALL');
   const [groupFilter, setGroupFilter] = useState('ALL');
   const [modelFilter, setModelFilter] = useState('ALL');
+  const [sortMode, setSortMode] = useState<DashboardSortMode>('default');
   const requestSequence = useRef(0);
 
   const fetchData = useCallback(async () => {
@@ -163,6 +169,7 @@ export default function DashboardPage() {
     .filter((item) => siteFilter === 'ALL' || String(item.upstreamId) === siteFilter)
     .filter((item) => groupFilter === 'ALL' || item.group === groupFilter)
     .filter((item) => modelFilter === 'ALL' || item.testModel === modelFilter);
+  const displayedItems = sortDashboardItems(filteredItems, sortMode);
   const hasFilters = siteFilter !== 'ALL' || groupFilter !== 'ALL' || modelFilter !== 'ALL';
   const summary = hasFilters
     ? calculateDashboardFilterSummary(
@@ -180,7 +187,7 @@ export default function DashboardPage() {
         <StatCard label="上游/分组" value={`${summary.total}/${summary.totalKeys}`} sub={`${summary.online} 在线 · ${summary.degraded} 降级 · ${summary.offline} 离线`} icon={Server} href="/upstreams" />
         <StatCard label="总余额" value={`¥${summary.totalBalance.toFixed(2)}`} sub="按各站点充值汇率折算" icon={Wallet} />
         <StatCard label="整体可用率" value={`${summary.availability}%`} sub="最近 24 小时" icon={TrendingUp}
-          highlight={summary.availability >= 99 ? 'good' : summary.availability >= 95 ? 'warn' : 'bad'} />
+          highlight={summary.availability >= 95 ? 'good' : summary.availability >= 80 ? 'warn' : 'bad'} />
         <StatCard label="待处理告警" value={String(summary.openIncidents)} sub={`已处理 ${summary.resolvedIncidents}`} icon={Bell}
           highlight={summary.openIncidents === 0 ? 'good' : 'bad'}
           href="/incidents" />
@@ -190,7 +197,18 @@ export default function DashboardPage() {
       <div>
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground"><Filter className="size-4" />站点使用对比</h2>
-          <div className="grid flex-1 grid-cols-1 gap-2 sm:ml-auto sm:flex sm:justify-end">
+          <div className="grid flex-1 grid-cols-1 gap-2 sm:ml-auto sm:flex sm:flex-wrap sm:justify-end">
+            <Select value={sortMode} onValueChange={(value) => setSortMode(value as DashboardSortMode)}>
+              <SelectTrigger className="w-full sm:w-44" aria-label="排序方式"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup>
+                <SelectItem value="default">默认顺序</SelectItem>
+                <SelectItem value="price">价格低到高</SelectItem>
+                <SelectItem value="success">成功率高到低</SelectItem>
+                <SelectItem value="latency">延迟低到高</SelectItem>
+                <SelectItem value="multiplier">倍率低到高</SelectItem>
+                <SelectItem value="balance">余额高到低</SelectItem>
+              </SelectGroup></SelectContent>
+            </Select>
             <Select value={siteFilter} onValueChange={(value) => { setSiteFilter(value); setGroupFilter('ALL'); setModelFilter('ALL'); }}>
               <SelectTrigger className="w-full sm:w-40" aria-label="筛选站点"><SelectValue /></SelectTrigger>
               <SelectContent><SelectGroup><SelectItem value="ALL">全部站点</SelectItem>{siteOptions.map((item) => <SelectItem key={item.upstreamId} value={String(item.upstreamId)}>{item.upstreamName}</SelectItem>)}</SelectGroup></SelectContent>
@@ -219,7 +237,12 @@ export default function DashboardPage() {
               <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
                 {['站点','分组','模型','输入价格','输出价格','倍率','24小时成功率','24小时平均延迟','最近探测','余额','最后采集'].map((label) => <th key={label} className="whitespace-nowrap px-3 py-3 text-left font-medium">{label}</th>)}
               </tr></thead>
-              <tbody>{filteredItems.map((item) => <tr key={`${item.keyId}:${item.testModel}`} className="border-t transition-colors hover:bg-muted/30">
+              <tbody>{displayedItems.map((item) => {
+                const itemId = dashboardItemId(item);
+                return <tr
+                  key={itemId}
+                  className="border-t transition-colors hover:bg-muted/30"
+                >
                 <td className="px-3 py-3"><Link href={`/upstreams/${item.upstreamId}`} className="block"><div className="flex items-center gap-2 font-semibold"><StatusDot status={item.status} />{item.upstreamName}</div></Link></td>
                 <td className="max-w-40 px-3 py-3 text-xs" title={item.group}>
                   <div className="truncate font-medium">{item.group}</div>
@@ -239,7 +262,7 @@ export default function DashboardPage() {
                 <td className="px-3 py-3"><ProbeStrip values={item.recentProbes} /></td>
                 <td className="px-3 py-3 tabular-nums">{item.balance == null ? '—' : `¥${item.balance.toFixed(2)}`}</td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{item.lastCollectedAt ? timeAgo(item.lastCollectedAt) : '从未'}</td>
-              </tr>)}</tbody>
+              </tr>})}</tbody>
             </table>
           </div>
         )}
