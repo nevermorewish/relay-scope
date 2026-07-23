@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Menu />
           </Button>
           <span className="font-semibold">中转站监控</span>
-          <div className="w-9" />
+          <ThemeToggleButton />
         </header>
 
         <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
@@ -73,14 +73,17 @@ function SidebarContent({
   return (
     <>
       {/* Logo */}
-      <div className="mb-6 flex items-center gap-2.5 px-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-          <Activity className="h-5 w-5" />
-        </span>
-        <div>
-          <div className="text-sm font-bold leading-tight">中转站监控</div>
-          <div className="text-[10px] text-muted-foreground">Relay Status Monitor</div>
+      <div className="mb-6 flex items-center justify-between gap-2 px-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Activity className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold leading-tight">中转站监控</div>
+            <div className="truncate text-[10px] text-muted-foreground">Relay Status Monitor</div>
+          </div>
         </div>
+        <ThemeToggleButton />
       </div>
 
       {/* 导航 */}
@@ -128,7 +131,6 @@ function SidebarContent({
             </Link>
           );
         })}
-        <ThemeToggleRow />
         {!authDisabled && <button
           onClick={onLogout}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -141,15 +143,18 @@ function SidebarContent({
   );
 }
 
-function ThemeToggleRow() {
+function ThemeToggleButton() {
   const { theme, toggle } = useTheme();
+  const label = theme === 'light' ? '切换到深色模式' : '切换到浅色模式';
   return (
     <button
+      type="button"
       onClick={toggle}
-      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      aria-label={label}
+      title={label}
+      className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-      {theme === 'light' ? '深色模式' : '浅色模式'}
     </button>
   );
 }
