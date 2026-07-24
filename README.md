@@ -2,12 +2,10 @@
 
 **LLM API 监测台：自托管的 AI API、中转站与模型服务监测面板。**
 
-RelayScope 面向需要同时使用多个 AI API 的个人和小团队，集中查看余额、人民币成本、价格倍率、真实生成成功率、平均延迟、模型状态和告警。支持 New API、SUB2API 与通用 OpenAI Compatible 服务，适用于中转站监测、模型 API 监测和大模型接口可用性检查。
+RelayScope 面向需要同时使用多个 AI API 的个人和小团队，集中查看余额、人民币费用、价格倍率、真实生成成功率、平均延迟、模型状态和告警。支持 New API、SUB2API 与通用 OpenAI Compatible 服务，适用于中转站监测、模型 API 监测和大模型接口可用性检查。
 
 > [!IMPORTANT]
 > RelayScope 会在本机保存 API 凭证和账户数据。官方配置只建议在个人电脑或可信内网运行，不建议把管理面板直接暴露到公网。
-
-![RelayScope 总览](docs/screenshots/desktop/dashboard.png)
 
 ## 功能
 
@@ -20,34 +18,6 @@ RelayScope 面向需要同时使用多个 AI API 的个人和小团队，集中�
 - **原地配置管理**：可在上游列表或站点详情直接编辑站点信息，并在详情页维护分组和模型。
 - **本地数据与备份**：SQLite 单文件存储，按保留天数清理历史，提供一致性快照备份。
 - **响应式界面**：支持浅色/深色主题、桌面端和移动端查看。
-
-## 界面预览
-
-所有截图均由虚构演示数据生成，不包含真实站点、余额或 API Key。
-
-| 上游管理 | 站点详情 |
-| --- | --- |
-| ![RelayScope 上游管理](docs/screenshots/desktop/upstreams.png) | ![RelayScope 站点详情](docs/screenshots/desktop/upstream-detail.png) |
-
-| 告警事件 | 系统设置 |
-| --- | --- |
-| ![RelayScope 告警事件](docs/screenshots/desktop/incidents.png) | ![RelayScope 系统设置](docs/screenshots/desktop/settings.png) |
-
-<details>
-<summary>查看内置使用帮助</summary>
-
-![RelayScope 使用帮助](docs/screenshots/desktop/help.png)
-
-</details>
-
-<details>
-<summary>查看移动端界面</summary>
-
-| 总览 | 上游管理 | 告警事件 |
-| --- | --- | --- |
-| ![移动端总览](docs/screenshots/mobile/dashboard.png) | ![移动端上游管理](docs/screenshots/mobile/upstreams.png) | ![移动端告警](docs/screenshots/mobile/incidents.png) |
-
-</details>
 
 ## Windows 快速开始
 
@@ -126,6 +96,9 @@ pnpm start
 
 真实请求最多生成 5 Token。不同 API 凭证可以并行，同一站点地址与 API Key 的任务会自动排队，避免自身并发冲突。
 
+> [!WARNING]
+> 自动真实测试和手动模型测试都会向上游发送真实 API 请求，产生少量 Token 消耗和费用；轻量余额、模型列表与基础连通检查不发送生成请求。
+
 ## 指标口径
 
 - **余额**：站点账户的共享余额，按照“1 元人民币获得的美元额度”统一换算成人民币，不按分组重复相加。
@@ -143,6 +116,8 @@ New API/A6API 等动态路由平台会优先读取真实消费日志，还原本
 侧栏“费用观测”提供今日、近 7 天、近 30 天、全部和自定义时间范围。主金额逐段累计站点共享余额的下降量，并使用消费发生时的充值比例换算为实际人民币；余额增加只更新新基线，不会抵消历史消费。首个成功余额快照作为零基线，因此不会计入添加站点前的消费。消费趋势会按范围自动选择粒度：短范围按 15 分钟、近 7 天按 6 小时、近 30 天按天，更长范围按周或月；选择单个站点时主趋势自动切换为该站点。
 
 费用观测只展示能够由余额下降统一核对的站点级费用，不展示分组或模型费用，也不会根据局部日志推测未知消费的归属。站点费用流水不随普通监测指标的保留期清理；删除站点时，对应费用流水一并删除。
+
+费用趋势依赖 RelayScope 运行期间取得的余额快照。服务停止期间不会采样；重新启动后发现的余额净下降会集中记在首个新快照，能够补到账户净消费，但不能还原真实消费时间。如果停机期间同时发生充值和消费，只能观察到两者的净余额变化。
 
 ## 安全边界
 
