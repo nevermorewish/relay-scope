@@ -256,6 +256,25 @@ function createHelpSections(): HelpSectionDefinition[] {
       ),
     },
     {
+      id: 'costs',
+      title: '费用观测',
+      summary: '查看全部站点总费用、站点排行以及单站点费用趋势。',
+      keywords: '费用 成本 消费 趋势 站点 人民币',
+      icon: CircleDollarSign,
+      content: (
+        <div className="space-y-3">
+          <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+            <li>站点总消费逐段累计共享账户余额的下降量；充值、退款或其他余额增加只更新新基线，不会抵消历史消费。</li>
+            <li>首个成功余额快照只建立基线，因此从站点加入 RelayScope 后开始统计。</li>
+            <li>趋势按范围自动使用 15 分钟、6 小时、天、周或月粒度；选择单个站点时主趋势自动切换为该站点。</li>
+            <li>费用观测只展示能够由余额下降统一核对的站点级费用，不展示无法准确对账的分组或模型金额。</li>
+            <li>人民币成本按消费发生时保存的充值比例换算；调整充值比例不会改写历史流水。</li>
+          </ul>
+          <Notice icon={AlertTriangle}>站点总消费是余额采样间的推算值。如果同一采集间隔内同时发生充值和消费，只能观察到净余额变化。</Notice>
+        </div>
+      ),
+    },
+    {
       id: 'incidents',
       title: '告警事件',
       summary: '区分需要自动恢复的运行异常和需要人工确认的价格变化。',
@@ -278,7 +297,7 @@ function createHelpSections(): HelpSectionDefinition[] {
       content: (
         <div className="space-y-3">
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-            <li>SQLite 默认位于 <code className="rounded bg-muted px-1">prisma/dev.db</code>，指标明细默认保留 30 天。</li>
+            <li>SQLite 默认位于 <code className="rounded bg-muted px-1">prisma/dev.db</code>，普通指标明细默认保留 30 天；成本流水长期保留。</li>
             <li>执行 <code className="rounded bg-muted px-1">pnpm db:backup</code> 可备份数据库和 <code className="rounded bg-muted px-1">.env.local</code>。</li>
             <li>备份包含能够解密 API Key 的材料，不能上传 GitHub，也不能公开分享。</li>
             <li>源码 Git 版本不能替代数据备份；Git 不会保存数据库、站点凭证和本机配置。</li>

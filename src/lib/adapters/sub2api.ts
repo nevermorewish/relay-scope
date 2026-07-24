@@ -17,7 +17,7 @@ import type {
   StreamTestResult,
   UpstreamAdapter,
 } from './base';
-import { buildBaseUrl, fetchWithTimeout } from './base';
+import { buildBaseUrl, fetchWithTimeout, parseModelTestUsage } from './base';
 import type { UpstreamType } from '@/lib/domain-types';
 
 export class Sub2ApiAdapter implements UpstreamAdapter {
@@ -107,6 +107,7 @@ export class Sub2ApiAdapter implements UpstreamAdapter {
   async testModel(ctx: AdapterContext, model: string): Promise<ModelTestResult> {
     const url = `${buildBaseUrl(ctx.baseUrl)}/v1/chat/completions`;
     const start = Date.now();
+    const prompt = 'Say "ok" in one word.';
     try {
       const res = await fetchWithTimeout(
         url,
@@ -115,7 +116,7 @@ export class Sub2ApiAdapter implements UpstreamAdapter {
           headers: this.headers(ctx.apiKey),
           body: JSON.stringify({
             model: model || ctx.testModel,
-            messages: [{ role: 'user', content: 'Say "ok" in one word.' }],
+            messages: [{ role: 'user', content: prompt }],
             max_tokens: 5,
             stream: false,
           }),
@@ -128,7 +129,12 @@ export class Sub2ApiAdapter implements UpstreamAdapter {
       }
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content ?? '';
-      return { ok: true, latencyMs, content: String(content).slice(0, 50) };
+      return {
+        ok: true,
+        latencyMs,
+        content: String(content).slice(0, 50),
+        usage: parseModelTestUsage(data, prompt, String(content)),
+      };
     } catch (e) {
       return { ok: false, errorMessage: errMsg(e) };
     }

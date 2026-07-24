@@ -24,9 +24,10 @@ import type {
   StreamTestResult,
   KeyMetadataResult,
   PricingResult,
+  CostLogResult,
   UpstreamAdapter,
 } from './base';
-import { buildBaseUrl, fetchWithTimeout } from './base';
+import { buildBaseUrl, fetchWithTimeout, parseModelTestUsage } from './base';
 import { calculateNewApiLogPrices, normalizeNewApiPricing } from '../pricing';
 
 // new-api quota 换算单位（1 美元 = 500000 quota）
@@ -283,6 +284,7 @@ export class NewApiAdapter implements UpstreamAdapter {
     }
     const url = `${buildBaseUrl(ctx.baseUrl)}/v1/chat/completions`;
     const start = Date.now();
+    const prompt = 'Say "ok" in one word.';
     try {
       const res = await fetchWithTimeout(
         url,
@@ -291,7 +293,7 @@ export class NewApiAdapter implements UpstreamAdapter {
           headers: this.bearerHeaders(ctx.apiKey),
           body: JSON.stringify({
             model: model || ctx.testModel,
-            messages: [{ role: 'user', content: 'Say "ok" in one word.' }],
+            messages: [{ role: 'user', content: prompt }],
             max_tokens: 5,
             stream: false,
           }),
@@ -304,7 +306,12 @@ export class NewApiAdapter implements UpstreamAdapter {
       }
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content ?? '';
-      return { ok: true, latencyMs, content: String(content).slice(0, 50) };
+      return {
+        ok: true,
+        latencyMs,
+        content: String(content).slice(0, 50),
+        usage: parseModelTestUsage(data, prompt, String(content)),
+      };
     } catch (e) {
       return { ok: false, errorMessage: errMsg(e) };
     }
@@ -406,6 +413,74 @@ export class NewApiAdapter implements UpstreamAdapter {
         : { ok: false, errorMessage: '价格接口未返回可识别的模型价格' };
     } catch (e) {
       return { ok: false, errorMessage: errMsg(e) };
+    }
+  }
+
+  async queryCostLogs(
+    ctx: AdapterContext,
+    options: { page: number; pageSize: number; startTime: Date; endTime: Date }
+  ): Promise<CostLogResult> {
+    if (!ctx.accessToken || !ctx.userId) {
+      return {
+        ok: false,
+        supported: false,
+        errorMessage: '未配置 accessToken 或 userId，无法读取消费日志',
+      };
+    }
+    const baseUrl = buildBaseUrl(ctx.baseUrl);
+    const query = new URLSearchParams({
+      p: String(options.page),
+      size: String(options.pageSize),
+      start_timestamp: String(Math.floor(options.startTime.getTime() / 1000)),
+      end_timestamp: String(Math.ceil(options.endTime.getTime() / 1000)),
+    });
+    try {
+      const [logRes, statusRes] = await Promise.all([
+        fetchWithTimeout(`${baseUrl}/api/log/self?${query}`, {
+          headers: {
+            Authorization: `Bearer ${ctx.accessToken}`,
+            'New-Api-User': ctx.userId,
+            Accept: 'application/json',
+          },
+        }, ctx.timeoutMs),
+        fetchWithTimeout(`${baseUrl}/api/status`, {
+          headers: { Accept: 'application/json' },
+        }, ctx.timeoutMs),
+      ]);
+      if (logRes.status === 404 || logRes.status === 405) {
+        return { ok: false, supported: false, errorMessage: `消费日志接口 HTTP ${logRes.status}` };
+      }
+      if (!logRes.ok) {
+        return { ok: false, supported: true, errorMessage: `消费日志接口 HTTP ${logRes.status}` };
+      }
+      const logBody = asRecord(await readJson(logRes));
+      if (logBody?.success === false) {
+        return {
+          ok: false,
+          supported: true,
+          errorMessage: asNonEmptyString(logBody.message) || '消费日志响应失败',
+        };
+      }
+      const statusData = statusRes.ok
+        ? asRecord(asRecord(await readJson(statusRes))?.data)
+        : undefined;
+      const quotaPerUnit = asFiniteNumber(statusData?.quota_per_unit)
+        ?? asFiniteNumber(statusData?.quotaPerUnit)
+        ?? QUOTA_PER_UNIT;
+      const data = asRecord(logBody?.data);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const entries = parseNewApiCostLogItems(items, quotaPerUnit);
+      const total = asFiniteNumber(data?.total);
+      return {
+        ok: true,
+        supported: true,
+        entries,
+        hasMore: total != null
+          ? options.page * options.pageSize < total
+          : items.length >= options.pageSize,
+      };
+    } catch (e) {
+      return { ok: false, supported: true, errorMessage: errMsg(e) };
     }
   }
 
@@ -550,6 +625,44 @@ function parseRecord(value: unknown): Record<string, unknown> | undefined {
 function positiveOrOne(value: unknown) {
   const parsed = asFiniteNumber(value);
   return parsed != null && parsed > 0 ? parsed : 1;
+}
+
+export function parseNewApiCostLogItems(items: unknown[], quotaPerUnit: number) {
+  if (!Number.isFinite(quotaPerUnit) || quotaPerUnit <= 0) return [];
+  return items.flatMap((value) => {
+    const row = asRecord(value);
+    const id = row?.id == null ? '' : String(row.id);
+    const modelName = asNonEmptyString(row?.model_name);
+    const quota = asFiniteNumber(row?.quota);
+    const createdAt = asFiniteNumber(row?.created_at);
+    if (!id || !modelName || quota == null || quota < 0 || createdAt == null) return [];
+    const other = parseRecord(row?.other);
+    const cacheReadTokens = nonNegativeInt(other?.cache_tokens);
+    const rawInputTokens = nonNegativeInt(row?.prompt_tokens);
+    return [{
+      id,
+      modelName,
+      remoteKeyId: row?.token_id == null ? undefined : String(row.token_id),
+      keyName: asNonEmptyString(row?.token_name),
+      inputTokens: Math.max(0, rawInputTokens - cacheReadTokens),
+      outputTokens: nonNegativeInt(row?.completion_tokens),
+      cacheReadTokens,
+      cacheWriteTokens: nonNegativeInt(other?.cache_creation_tokens),
+      quota,
+      quotaPerUnit,
+      occurredAt: new Date(createdAt * 1000),
+      rawData: {
+        group: asNonEmptyString(row?.group),
+        requestId: asNonEmptyString(row?.request_id),
+        routeType: row?.route_type,
+      },
+    }];
+  });
+}
+
+function nonNegativeInt(value: unknown) {
+  const parsed = asFiniteNumber(value);
+  return parsed != null && parsed >= 0 ? Math.trunc(parsed) : 0;
 }
 
 async function safeReadText(res: Response): Promise<string> {

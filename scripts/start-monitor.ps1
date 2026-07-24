@@ -7,11 +7,21 @@ $launcherMutex = [System.Threading.Mutex]::new($false, 'Local\RelayScopeLauncher
 $hasLauncherLock = $false
 
 function Test-MonitorReady {
+  $response = $null
+  $reader = $null
   try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $monitorUrl -TimeoutSec 2
-    return $response.StatusCode -eq 200 -and $response.Content -match 'RelayScope'
+    $request = [System.Net.HttpWebRequest]::Create($monitorUrl)
+    $request.Proxy = $null
+    $request.Timeout = 2000
+    $response = $request.GetResponse()
+    $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+    $content = $reader.ReadToEnd()
+    return [int]$response.StatusCode -eq 200 -and $content -match 'RelayScope'
   } catch {
     return $false
+  } finally {
+    if ($reader) { $reader.Dispose() }
+    if ($response) { $response.Dispose() }
   }
 }
 

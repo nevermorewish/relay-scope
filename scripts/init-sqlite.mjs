@@ -74,6 +74,46 @@ CREATE TABLE IF NOT EXISTS "UsageSnapshot" (
   "accountCost" REAL, "actualCost" REAL NOT NULL,
   "recordedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS "CostRecord" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "upstreamId" INTEGER NOT NULL REFERENCES "Upstream"("id") ON DELETE CASCADE,
+  "upstreamKeyId" INTEGER NOT NULL REFERENCES "UpstreamKey"("id") ON DELETE CASCADE,
+  "modelName" TEXT NOT NULL,
+  "inputTokens" INTEGER NOT NULL DEFAULT 0, "outputTokens" INTEGER NOT NULL DEFAULT 0,
+  "cacheReadTokens" INTEGER NOT NULL DEFAULT 0, "cacheWriteTokens" INTEGER NOT NULL DEFAULT 0,
+  "costUsdCredit" REAL, "costCny" REAL, "creditUsdPerCny" REAL NOT NULL,
+  "source" TEXT NOT NULL, "completeness" TEXT NOT NULL DEFAULT 'COMPLETE',
+  "estimated" INTEGER NOT NULL DEFAULT 0, "sourceRef" TEXT NOT NULL,
+  "rawData" TEXT, "occurredAt" DATETIME NOT NULL,
+  "recordedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("upstreamId", "sourceRef")
+);
+CREATE TABLE IF NOT EXISTS "CostSyncState" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "upstreamKeyId" INTEGER NOT NULL UNIQUE REFERENCES "UpstreamKey"("id") ON DELETE CASCADE,
+  "mode" TEXT NOT NULL, "coverageStartedAt" DATETIME, "cursor" TEXT,
+  "lastSyncedAt" DATETIME, "lastError" TEXT,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS "SiteCostRecord" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "upstreamId" INTEGER NOT NULL REFERENCES "Upstream"("id") ON DELETE CASCADE,
+  "previousMetricId" INTEGER NOT NULL, "currentMetricId" INTEGER NOT NULL,
+  "balanceBefore" REAL NOT NULL, "balanceAfter" REAL NOT NULL,
+  "costUsdCredit" REAL NOT NULL, "costCny" REAL NOT NULL,
+  "creditUsdPerCny" REAL NOT NULL, "sourceRef" TEXT NOT NULL,
+  "occurredAt" DATETIME NOT NULL, "recordedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE("upstreamId", "sourceRef")
+);
+CREATE TABLE IF NOT EXISTS "SiteCostState" (
+  "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+  "upstreamId" INTEGER NOT NULL UNIQUE REFERENCES "Upstream"("id") ON DELETE CASCADE,
+  "lastMetricId" INTEGER NOT NULL, "lastBalance" REAL NOT NULL,
+  "coverageStartedAt" DATETIME NOT NULL, "lastProcessedAt" DATETIME NOT NULL,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS "Incident" (
   "id" INTEGER PRIMARY KEY AUTOINCREMENT,
   "upstreamId" INTEGER NOT NULL REFERENCES "Upstream"("id") ON DELETE CASCADE,
@@ -108,6 +148,11 @@ CREATE INDEX IF NOT EXISTS "Price_upstream_model_recorded_idx" ON "PriceSnapshot
 CREATE INDEX IF NOT EXISTS "Price_key_model_recorded_idx" ON "PriceSnapshot"("upstreamKeyId", "modelName", "recordedAt");
 CREATE INDEX IF NOT EXISTS "Usage_key_model_recorded_idx" ON "UsageSnapshot"("upstreamKeyId", "modelName", "recordedAt");
 CREATE INDEX IF NOT EXISTS "Usage_upstream_recorded_idx" ON "UsageSnapshot"("upstreamId", "recordedAt");
+CREATE INDEX IF NOT EXISTS "Cost_upstream_occurred_idx" ON "CostRecord"("upstreamId", "occurredAt");
+CREATE INDEX IF NOT EXISTS "Cost_key_occurred_idx" ON "CostRecord"("upstreamKeyId", "occurredAt");
+CREATE INDEX IF NOT EXISTS "Cost_key_model_occurred_idx" ON "CostRecord"("upstreamKeyId", "modelName", "occurredAt");
+CREATE INDEX IF NOT EXISTS "CostSync_mode_synced_idx" ON "CostSyncState"("mode", "lastSyncedAt");
+CREATE INDEX IF NOT EXISTS "SiteCost_upstream_occurred_idx" ON "SiteCostRecord"("upstreamId", "occurredAt");
 CREATE INDEX IF NOT EXISTS "MonitoredModel_key_enabled_tested_idx" ON "MonitoredModel"("upstreamKeyId", "enabled", "lastTestedAt");
 CREATE INDEX IF NOT EXISTS "Incident_upstream_resolved_created_idx" ON "Incident"("upstreamId", "resolved", "createdAt");
 CREATE INDEX IF NOT EXISTS "Incident_key_resolved_created_idx" ON "Incident"("upstreamKeyId", "resolved", "createdAt");

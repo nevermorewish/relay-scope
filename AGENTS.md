@@ -5,7 +5,7 @@
 ## 项目是什么
 
 - 名称：RelayScope（LLM API 监测台）
-- 用途：自托管的 AI API、中转站与模型服务监测面板（余额、价格、延迟、模型测试、告警）
+- 用途：自托管的 AI API、中转站与模型服务监测面板（余额、价格、成本、延迟、模型测试、告警）
 - 栈：Next.js 14.2.35 App Router + TypeScript + Prisma + SQLite + Tailwind
 - 运行时：Node.js >= 22.5（初始化脚本使用 `node:sqlite`）
 - 包管理：pnpm 11.9.0
@@ -35,6 +35,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 | 页面 | `src/app/` |
 | API | `src/app/api/` |
 | 业务逻辑 | `src/lib/`（采集、告警、加密、适配器） |
+| 费用观测 | `src/lib/cost-observation.ts`, `src/app/api/costs/`, `src/app/(dashboard)/costs/` |
 | 上游适配器 | `src/lib/adapters/` |
 | 数据模型 | `prisma/schema.prisma`（provider = sqlite） |
 | 初始化脚本 | `scripts/init-sqlite.mjs` |
@@ -60,6 +61,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 6. **风格**：跟随现有代码；不要无故加注释；不要擅自 commit。
 7. **模型恢复语义**：轻量余额/模型列表检查不得覆盖最近一次真实模型测试失败；只有同一模型后续真实测试成功才恢复。
 8. **部署边界**：官方默认配置仅面向本机或可信内网；Docker 只绑定 `127.0.0.1`，不得把免登录面板描述为适合直接暴露公网。
+9. **费用口径**：站点总消费以建站后共享余额的相邻下降量为准，余额增加不抵消历史消费；当前只展示站点级费用，不采集或展示无法与余额严格对账的分组/模型费用。站点费用流水不受普通指标保留期清理。
 
 ## 文档同步
 

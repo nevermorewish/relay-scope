@@ -10,6 +10,7 @@ import {
   normalizeNewApiPricing,
   percentile,
 } from './pricing';
+import { parseNewApiCostLogItems } from './adapters/newapi';
 
 test('normalizes New API token ratios with group multiplier', () => {
   const prices = normalizeNewApiPricing({
@@ -72,4 +73,22 @@ test('calculates A6 actual route prices from New API log ratios', () => {
     outputPrice: 0.3024,
     cacheReadPrice: 0.00504,
   });
+});
+
+test('parses New API cost logs without double-counting cached input tokens', () => {
+  const [entry] = parseNewApiCostLogItems([{
+    id: 123,
+    model_name: 'model-a',
+    token_id: 7,
+    token_name: 'gpt-monitor',
+    prompt_tokens: 100,
+    completion_tokens: 20,
+    quota: 250000,
+    created_at: 1784869000,
+    other: JSON.stringify({ cache_tokens: 40 }),
+  }], 500000);
+  assert.equal(entry.id, '123');
+  assert.equal(entry.inputTokens, 60);
+  assert.equal(entry.cacheReadTokens, 40);
+  assert.equal(entry.quota / entry.quotaPerUnit, 0.5);
 });

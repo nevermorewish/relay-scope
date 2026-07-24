@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { calculateDashboardFilterSummary } from '@/lib/dashboard-filter-summary';
 import { getPaginationItems, PAGE_SIZE_OPTIONS } from '@/lib/pagination';
 import { formatLatencySeconds } from '@/lib/latency-display';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Pagination,
   PaginationContent,
@@ -221,17 +222,22 @@ export default function DashboardPage() {
     <PageHeader
       icon={LayoutDashboard}
       title="总览"
-      actions={(
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => { setRefreshing(true); fetchData(); }}
-          disabled={refreshing || loading}
-        >
-          <RefreshCw className={cn(refreshing && 'animate-spin')} data-icon="inline-start" />
-          刷新
-        </Button>
-      )}
+      actions={<TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setRefreshing(true); fetchData(); }}
+              disabled={refreshing || loading}
+            >
+              <RefreshCw className={cn(refreshing && 'animate-spin')} data-icon="inline-start" />
+              刷新
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>重新读取最新总览数据，不会主动采集站点或测试模型</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>}
     />
   );
 

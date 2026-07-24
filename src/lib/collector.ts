@@ -17,6 +17,7 @@ import { runInConcurrencyLanes } from './concurrency-lanes';
 import { syncDynamicModelPrice } from './dynamic-pricing';
 import { withCredentialLane } from './monitor-runtime';
 import { combineCollectionAndModelStatus } from './model-health';
+import { syncSiteBalanceCosts } from './cost-observation';
 
 export type CollectMode = 'light' | 'heavy';
 
@@ -187,16 +188,17 @@ async function collectOneKeyInLane(
     data: updateData,
   });
 
-  if (balanceRes.usageStats?.length) {
-    await recordUsagePricing({
-      upstreamId: upstream.id,
-      upstreamKeyId: key.id,
-      configuredMultiplier: key.groupRateMultiplier,
-      stats: balanceRes.usageStats,
-      dynamicPricing: upstream.type === 'NEW_API',
-    }).catch((error) => {
-      console.warn('[pricing] usage snapshot failed:', error instanceof Error ? error.message : error);
-    });
+  if (upstream.type === 'SUB2API' && balanceRes.usageStats !== undefined) {
+    if (balanceRes.usageStats.length) {
+      await recordUsagePricing({
+        upstreamId: upstream.id,
+        upstreamKeyId: key.id,
+        configuredMultiplier: key.groupRateMultiplier,
+        stats: balanceRes.usageStats,
+      }).catch((error) => {
+        console.warn('[pricing] usage snapshot failed:', error instanceof Error ? error.message : error);
+      });
+    }
   }
 
   // 告警判断（按 key）
@@ -283,6 +285,12 @@ export async function collectUpstreamsByCredential(
   );
 
   await Promise.all(upstreams.map((upstream) => refreshUpstreamAggregateStatus(upstream.id)));
+  await Promise.all(upstreams.map((upstream) => syncSiteBalanceCosts({
+    upstreamId: upstream.id,
+    creditUsdPerCny: upstream.creditUsdPerCny,
+  }).catch((error) => {
+    console.warn('[cost] balance cost sync failed:', error instanceof Error ? error.message : error);
+  })));
   return jobs.map((job, index) => ({
     upstreamId: job.upstream.id,
     keyId: job.key.id,
@@ -384,6 +392,12 @@ export async function collectOneKeyManual(keyId: number, monitoredModelId?: numb
     if (!model) throw new Error('模型不存在或未启用');
   }
   const metric = await collectOneKey(key, 'heavy', monitoredModelId);
+  await syncSiteBalanceCosts({
+    upstreamId: key.upstreamId,
+    creditUsdPerCny: key.upstream.creditUsdPerCny,
+  }).catch((error) => {
+    console.warn('[cost] balance cost sync failed:', error instanceof Error ? error.message : error);
+  });
   await refreshUpstreamAggregateStatus(key.upstreamId);
   return metric;
 }

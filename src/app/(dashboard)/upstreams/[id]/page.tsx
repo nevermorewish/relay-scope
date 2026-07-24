@@ -4,18 +4,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
-  KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog, Pencil,
+  KeyRound, Activity, Trash2, Loader2, ServerCog, Pencil, CircleDollarSign,
 } from 'lucide-react';
-import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -32,7 +25,7 @@ import { cn } from '@/lib/utils';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
 import { resolvedIncidentLabel } from '@/lib/incident-semantics';
-import { formatLatencySeconds, latencySecondsValue, normalizeLatencyMessage } from '@/lib/latency-display';
+import { formatLatencySeconds, normalizeLatencyMessage } from '@/lib/latency-display';
 
 // ============ 类型 ============
 
@@ -83,17 +76,6 @@ interface Upstream {
   keys?: UpstreamKey[];
 }
 
-interface Metric {
-  id: number;
-  balance: number | null;
-  latencyMs: number | null;
-  modelTestOk: boolean | null;
-  modelTestLatMs: number | null;
-  success: boolean;
-  errorMessage: string | null;
-  recordedAt: string;
-}
-
 interface Incident {
   id: number;
   type: string;
@@ -104,8 +86,6 @@ interface Incident {
   upstreamKey?: { id: number; group: string } | null;
 }
 
-type Range = '6h' | '24h' | '7d';
-
 // ============ 页面 ============
 
 export default function UpstreamDetailPage() {
@@ -114,25 +94,16 @@ export default function UpstreamDetailPage() {
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [upstream, setUpstream] = useState<Upstream | null>(null);
-  const [metrics, setMetrics] = useState<Metric[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [range, setRange] = useState<Range>('24h');
-  const [selectedKeyId, setSelectedKeyId] = useState<string>('');
   const [testing, setTesting] = useState(false);
   const [testingModelId, setTestingModelId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingUpstream, setEditingUpstream] = useState(false);
   const baseRequestSequence = useRef(0);
-  const metricRequestSequence = useRef(0);
   const actionInFlight = useRef(false);
 
   const keys = useMemo(() => upstream?.keys || [], [upstream?.keys]);
-  const activeKeyId = selectedKeyId || (keys[0]?.id != null ? String(keys[0].id) : '');
-  const activeKeyIdRef = useRef(activeKeyId);
-  const rangeRef = useRef(range);
-  activeKeyIdRef.current = activeKeyId;
-  rangeRef.current = range;
 
   // 加载上游 + 告警
   const fetchBase = useCallback(async () => {
@@ -151,11 +122,6 @@ export default function UpstreamDetailPage() {
       if (!iRes.ok) throw new Error(nextIncidents.error || '获取告警历史失败');
       if (!isCurrent()) return false;
       setUpstream(nextUpstream);
-      setSelectedKeyId((current) => {
-        const nextKeys = Array.isArray(nextUpstream.keys) ? nextUpstream.keys : [];
-        if (current && nextKeys.some((key: UpstreamKey) => String(key.id) === current)) return current;
-        return nextKeys[0]?.id != null ? String(nextKeys[0].id) : '';
-      });
       setIncidents(Array.isArray(nextIncidents) ? nextIncidents : []);
       return true;
     } finally {
@@ -163,38 +129,9 @@ export default function UpstreamDetailPage() {
     }
   }, [params.id]);
 
-  // 加载所选分组的指标
-  const fetchMetrics = useCallback(async () => {
-    const isCurrent = beginLatestRequest(metricRequestSequence);
-    const keyId = activeKeyIdRef.current;
-    const currentRange = rangeRef.current;
-    if (!keyId) {
-      if (!isCurrent()) return false;
-      setMetrics([]);
-      return true;
-    }
-    const qs = currentRange === '7d' ? 'days=7' : `hours=${currentRange === '6h' ? 6 : 24}`;
-    const mRes = await fetch(`/api/metrics?upstreamKeyId=${keyId}&${qs}&limit=2000`, { cache: 'no-store' });
-    const nextMetrics = await mRes.json().catch(() => []);
-    if (!mRes.ok) throw new Error(nextMetrics.error || '获取指标失败');
-    if (!isCurrent()) return false;
-    setMetrics(Array.isArray(nextMetrics) ? nextMetrics : []);
-    return true;
-  }, []);
-
   useEffect(() => {
     void fetchBase().catch((error) => toast.error((error as Error).message));
   }, [fetchBase]);
-  useEffect(() => {
-    void fetchMetrics().catch((error) => toast.error((error as Error).message));
-  }, [fetchMetrics, activeKeyId, range]);
-
-  // 上游变化后，若未选择 key 则默认选第一个
-  useEffect(() => {
-    if (!selectedKeyId && keys.length > 0 && keys[0].id != null) {
-      setSelectedKeyId(String(keys[0].id));
-    }
-  }, [keys, selectedKeyId]);
 
   async function handleTest() {
     if (!upstream || actionInFlight.current) return;
@@ -210,7 +147,6 @@ export default function UpstreamDetailPage() {
         const fail = total - ok;
         toast.success(`${upstream.name} 测试完成：${ok} 成功${fail > 0 ? `，${fail} 失败` : ''}`, { id: tid });
         await fetchBase();
-        await fetchMetrics();
       } else {
         toast.error(data.error || '测试失败', { id: tid });
       }
@@ -251,7 +187,6 @@ export default function UpstreamDetailPage() {
         } : key),
       } : current);
       await fetchBase();
-      if (activeKeyIdRef.current === String(keyId)) await fetchMetrics();
     } catch (error) {
       toast.error((error as Error).message, { id: tid });
     } finally {
@@ -275,7 +210,7 @@ export default function UpstreamDetailPage() {
       const total = data.results?.length || 0;
       const success = data.successCount ?? data.results?.filter((item: { status: string }) => item.status === 'ok').length ?? 0;
       const failed = data.failureCount ?? total - success;
-      await Promise.all([fetchBase(), fetchMetrics()]);
+      await fetchBase();
       const message = `${upstream.name} 刷新完成：${success} 成功${failed > 0 ? `，${failed} 失败` : ''}`;
       if (success === 0) {
         toast.error(message, { id: tid });
@@ -322,29 +257,6 @@ export default function UpstreamDetailPage() {
     [keys, upstream?.creditUsdPerCny],
   );
 
-  const chartData = useMemo(() => metrics.map((m) => ({
-    time: new Date(m.recordedAt).toLocaleString('zh-CN', range === '7d'
-      ? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
-      : { hour: '2-digit', minute: '2-digit' }),
-    balance: convertUsdCreditToCny(m.balance, upstream?.creditUsdPerCny),
-    latency: m.latencyMs == null ? null : latencySecondsValue(m.latencyMs),
-    success: m.success ? 1 : 0,
-  })), [metrics, range, upstream?.creditUsdPerCny]);
-  const balanceChartData = useMemo(
-    () => chartData.filter((point): point is typeof point & { balance: number } => point.balance != null),
-    [chartData],
-  );
-  const latencyChartData = useMemo(
-    () => chartData.filter((point): point is typeof point & { latency: number } => point.latency != null),
-    [chartData],
-  );
-  const balanceDomain = useMemo(
-    () => paddedDomain(balanceChartData.map((point) => point.balance)),
-    [balanceChartData],
-  );
-
-  const successCount = metrics.filter((m) => m.success).length;
-  const availability = metrics.length > 0 ? (successCount / metrics.length) * 100 : 0;
   const monitoredModelCount = keys.reduce(
     (count, key) => count + (key.monitoredModels?.filter((model) => model.enabled).length || (key.testModel ? 1 : 0)),
     0,
@@ -410,6 +322,14 @@ export default function UpstreamDetailPage() {
         }
         actions={
           <TooltipProvider delayDuration={300}>
+            <ActionTooltip label="查看该站点从建站后的累计费用和消费趋势">
+              <Button size="sm" variant="outline" asChild>
+                <a href={`/costs?upstreamId=${upstream.id}`}>
+                  <CircleDollarSign data-icon="inline-start" />
+                  费用
+                </a>
+              </Button>
+            </ActionTooltip>
             <ActionTooltip label="编辑站点信息、分组和模型">
               <Button size="sm" variant="outline" onClick={() => setEditingUpstream(true)}>
                 <Pencil data-icon="inline-start" />
@@ -444,12 +364,9 @@ export default function UpstreamDetailPage() {
       />
 
       {/* ====== 汇总指标 ====== */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <SummaryCard icon={<Wallet className="h-4 w-4" />} label="账户余额"
           value={totalBalance == null ? '—' : `¥${totalBalance.toFixed(2)}`} />
-        <SummaryCard icon={<Gauge className="h-4 w-4" />} label={`${range} 可用率`}
-          value={`${availability.toFixed(1)}%`}
-          tone={availability >= 99 ? 'good' : availability >= 95 ? 'warn' : 'bad'} />
         <SummaryCard icon={<KeyRound className="h-4 w-4" />} label="分组数"
           value={String(keys.length)} />
         <SummaryCard icon={<Activity className="h-4 w-4" />} label="监测模型"
@@ -458,9 +375,8 @@ export default function UpstreamDetailPage() {
 
       {/* ====== 主体 Tabs ====== */}
       <Tabs defaultValue="groups" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto">
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:inline-flex sm:w-auto">
           <TabsTrigger value="groups">分组详情</TabsTrigger>
-          <TabsTrigger value="trends">趋势</TabsTrigger>
           <TabsTrigger value="incidents">告警历史</TabsTrigger>
         </TabsList>
 
@@ -486,127 +402,6 @@ export default function UpstreamDetailPage() {
               ))}
             </div>
           )}
-        </TabsContent>
-
-        {/* ---- 趋势 ---- */}
-        <TabsContent value="trends" className="space-y-3">
-          <Card>
-            <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-base">趋势图</CardTitle>
-                <CardDescription>选择分组查看余额与延迟趋势</CardDescription>
-              </div>
-              <div className="w-full sm:w-auto">
-                <Select value={activeKeyId} onValueChange={setSelectedKeyId}>
-                  <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="选择分组" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {keys.map((k) => (
-                        <SelectItem key={k.id} value={String(k.id)}>
-                          {k.group}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* 时间范围切换 */}
-              <div className="flex gap-1">
-                {(['6h', '24h', '7d'] as Range[]).map((r) => (
-                  <Button
-                    key={r}
-                    size="sm"
-                    variant={range === r ? 'default' : 'outline'}
-                    onClick={() => setRange(r)}
-                  >
-                    {r === '6h' ? '6小时' : r === '24h' ? '24小时' : '7天'}
-                  </Button>
-                ))}
-              </div>
-
-              {!activeKeyId ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">请选择分组</div>
-              ) : metrics.length === 0 ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">该分组在所选范围内暂无数据</div>
-              ) : (
-                <>
-                  {/* 余额趋势 */}
-                  <div className="trend-chart min-w-0" onMouseDown={preventChartFocus}>
-                    <div className="mb-2 text-sm font-medium">余额趋势</div>
-                    {balanceChartData.length === 0 ? (
-                      <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-                        所选范围内暂无余额数据
-                      </div>
-                    ) : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <AreaChart
-                        data={balanceChartData}
-                        margin={{ top: 8, right: 8, bottom: 0, left: 8 }}
-                        accessibilityLayer={false}
-                      >
-                        <defs>
-                          <linearGradient id="balGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" strokeOpacity={0.5} />
-                        <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={40} />
-                        <YAxis
-                          width={58}
-                          tick={{ fontSize: 11 }}
-                          tickFormatter={(value) => `¥${Number(value).toFixed(2)}`}
-                          domain={balanceDomain}
-                        />
-                        <Tooltip
-                          formatter={(v) => (typeof v === 'number' && v != null ? `¥${v.toFixed(2)}` : '—')}
-                          contentStyle={tooltipStyle}
-                          labelStyle={tooltipLabelStyle}
-                          itemStyle={tooltipItemStyle}
-                        />
-                        <Area type="monotone" dataKey="balance" name="余额"
-                          stroke="hsl(var(--chart-1))" strokeWidth={2} fill="url(#balGrad)" connectNulls />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  {/* 延迟趋势 */}
-                  <div className="trend-chart min-w-0" onMouseDown={preventChartFocus}>
-                    <div className="mb-2 text-sm font-medium">基础接口延迟（秒）</div>
-                    {latencyChartData.length === 0 ? (
-                      <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
-                        所选范围内暂无延迟数据
-                      </div>
-                    ) : (
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart
-                        data={latencyChartData}
-                        margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                        accessibilityLayer={false}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" strokeOpacity={0.5} />
-                        <XAxis dataKey="time" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={40} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip
-                          formatter={(v) => (typeof v === 'number' && v != null ? `${v.toFixed(2)}秒` : '—')}
-                          contentStyle={tooltipStyle}
-                          labelStyle={tooltipLabelStyle}
-                          itemStyle={tooltipItemStyle}
-                        />
-                        <Line type="monotone" dataKey="latency" name="基础接口延迟"
-                          stroke="hsl(var(--chart-2))" strokeWidth={1.5} dot={false} connectNulls />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    )}
-                  </div>
-
-                </>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ---- 告警历史 ---- */}
@@ -657,24 +452,6 @@ export default function UpstreamDetailPage() {
 
 // ============ 子组件 ============
 
-const tooltipStyle = {
-  fontSize: '12px',
-  borderRadius: '6px',
-  border: '1px solid hsl(var(--border))',
-  backgroundColor: 'hsl(var(--popover))',
-  color: 'hsl(var(--popover-foreground))',
-  boxShadow: '0 8px 24px rgb(0 0 0 / 0.18)',
-} as const;
-
-const tooltipLabelStyle = {
-  color: 'hsl(var(--popover-foreground))',
-  marginBottom: '4px',
-} as const;
-
-const tooltipItemStyle = {
-  color: 'hsl(var(--popover-foreground))',
-} as const;
-
 function ActionTooltip({ label, children }: { label: string; children: React.ReactElement }) {
   return (
     <UiTooltip>
@@ -686,19 +463,6 @@ function ActionTooltip({ label, children }: { label: string; children: React.Rea
       </TooltipContent>
     </UiTooltip>
   );
-}
-
-function preventChartFocus(event: React.MouseEvent<HTMLDivElement>) {
-  event.preventDefault();
-  (document.activeElement as HTMLElement | null)?.blur();
-}
-
-function paddedDomain(values: number[]): [number, number] {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min;
-  const padding = span > 0 ? span * 0.08 : Math.max(Math.abs(min) * 0.01, 0.01);
-  return [Math.max(0, min - padding), max + padding];
 }
 
 function SummaryCard({ icon, label, value, tone }: {

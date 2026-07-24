@@ -82,6 +82,36 @@ export interface ModelTestResult {
   latencyMs?: number;
   /** 返回内容片段 */
   content?: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    estimated: boolean;
+  };
+  errorMessage?: string;
+}
+
+export interface CostLogEntry {
+  id: string;
+  modelName: string;
+  remoteKeyId?: string;
+  keyName?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  quota: number;
+  quotaPerUnit: number;
+  occurredAt: Date;
+  rawData?: Record<string, unknown>;
+}
+
+export interface CostLogResult {
+  ok: boolean;
+  supported?: boolean;
+  entries?: CostLogEntry[];
+  hasMore?: boolean;
   errorMessage?: string;
 }
 
@@ -144,6 +174,12 @@ export interface UpstreamAdapter {
 
   /** 获取最近实际路由日志中的模型价格；用于动态路由聚合平台。 */
   queryActualPrices?(ctx: AdapterContext, model: string): Promise<PricingResult>;
+
+  /** 分页读取逐条消费日志；只有能提供稳定日志 ID 与实际扣费的上游实现。 */
+  queryCostLogs?(
+    ctx: AdapterContext,
+    options: { page: number; pageSize: number; startTime: Date; endTime: Date }
+  ): Promise<CostLogResult>;
 }
 
 /** 辅助：构造规范的 base URL（带协议） */
@@ -169,4 +205,46 @@ export async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** 兼容 OpenAI 常见 usage 字段；缺失时仅对本地探测内容做保守估算。 */
+export function parseModelTestUsage(
+  payload: unknown,
+  prompt: string,
+  content: string
+): NonNullable<ModelTestResult['usage']> {
+  const root = payload !== null && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {};
+  const usage = root.usage !== null && typeof root.usage === 'object' && !Array.isArray(root.usage)
+    ? root.usage as Record<string, unknown>
+    : {};
+  const input = finiteInt(usage.prompt_tokens) ?? finiteInt(usage.input_tokens);
+  const output = finiteInt(usage.completion_tokens) ?? finiteInt(usage.output_tokens);
+  const details = usage.prompt_tokens_details !== null
+    && typeof usage.prompt_tokens_details === 'object'
+    && !Array.isArray(usage.prompt_tokens_details)
+    ? usage.prompt_tokens_details as Record<string, unknown>
+    : {};
+  const cacheRead = finiteInt(details.cached_tokens) ?? finiteInt(usage.cache_read_input_tokens) ?? 0;
+  const rawInput = input ?? estimateTextTokens(prompt);
+  return {
+    inputTokens: Math.max(0, rawInput - cacheRead),
+    outputTokens: output ?? estimateTextTokens(content),
+    cacheReadTokens: cacheRead,
+    cacheWriteTokens: finiteInt(usage.cache_creation_input_tokens) ?? 0,
+    estimated: input == null || output == null,
+  };
+}
+
+function finiteInt(value: unknown) {
+  const parsed = typeof value === 'string' && value.trim() ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0
+    ? Math.trunc(parsed)
+    : undefined;
+}
+
+function estimateTextTokens(text: string) {
+  const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
+  return cjk + Math.ceil((text.length - cjk) / 4);
 }
