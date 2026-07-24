@@ -31,3 +31,19 @@ export async function GET(request: Request) {
 
   return NextResponse.json(incidents);
 }
+
+/** 一键确认全部待处理告警 */
+export async function PATCH() {
+  try {
+    const result = await prisma.incident.updateMany({
+      where: { resolved: false },
+      data: { resolved: true, resolvedAt: new Date() },
+    });
+    return NextResponse.json({ updated: result.count });
+  } catch (error) {
+    return NextResponse.json(
+      { error: '批量确认失败: ' + (error as Error).message },
+      { status: 500 },
+    );
+  }
+}

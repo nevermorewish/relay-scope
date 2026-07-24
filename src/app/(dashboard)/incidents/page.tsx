@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/page-header';
+import { useConfirm } from '@/components/confirm-dialog';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import {
   resolveIncidentActionLabel,
@@ -15,6 +16,7 @@ import {
   resolvedIncidentTimeLabel,
 } from '@/lib/incident-semantics';
 import { normalizeLatencyMessage } from '@/lib/latency-display';
+import { toast } from 'sonner';
 
 interface Incident {
   id: number;
@@ -36,6 +38,8 @@ export default function IncidentsPage() {
   const [filter, setFilter] = useState<FilterKey>('open');
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const [resolvingAll, setResolvingAll] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const requestSequence = useRef(0);
 
   const fetchIncidents = useCallback(async () => {
@@ -63,14 +67,40 @@ export default function IncidentsPage() {
   async function handleResolve(id: number) {
     setResolvingId(id);
     try {
-      await fetch(`/api/incidents/${id}`, {
+      const response = await fetch(`/api/incidents/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolved: true }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || '确认失败');
       await fetchIncidents();
+    } catch (error) {
+      toast.error((error as Error).message);
     } finally {
       setResolvingId(null);
+    }
+  }
+
+  async function handleResolveAll() {
+    const accepted = await confirm({
+      title: '确认全部待处理告警？',
+      description: '所有当前待处理的告警都会被标记为已确认或已解决。',
+      confirmText: '一键确认',
+    });
+    if (!accepted) return;
+
+    setResolvingAll(true);
+    try {
+      const response = await fetch('/api/incidents', { method: 'PATCH' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || '批量确认失败');
+      toast.success(result.updated > 0 ? `已确认 ${result.updated} 条告警` : '没有待确认的告警');
+      await fetchIncidents();
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setResolvingAll(false);
     }
   }
 
@@ -88,16 +118,32 @@ export default function IncidentsPage() {
       value={filter}
       onValueChange={(value) => setFilter(value as FilterKey)}
     >
+      {dialog}
       <PageHeader
         icon={Bell}
         title="告警事件"
         actionsClassName="w-full justify-start sm:w-auto sm:justify-end"
         actions={(
-          <TabsList className="grid w-full grid-cols-3 sm:w-auto">
-            {filters.map((item) => (
-              <TabsTrigger key={item.key} value={item.key}>{item.label}</TabsTrigger>
-            ))}
-          </TabsList>
+          <>
+            {filter !== 'resolved' && openCount > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={resolvingAll || resolvingId != null}
+                onClick={handleResolveAll}
+              >
+                {resolvingAll
+                  ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                  : <Check data-icon="inline-start" />}
+                {resolvingAll ? '确认中…' : '一键确认'}
+              </Button>
+            )}
+            <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+              {filters.map((item) => (
+                <TabsTrigger key={item.key} value={item.key}>{item.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </>
         )}
       />
 

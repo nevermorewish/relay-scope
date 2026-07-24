@@ -1,17 +1,15 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, Zap, KeyRound, RefreshCw, Server, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Zap, RefreshCw, Server, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { StatusDot } from '@/components/StatusBadge';
 import { useConfirm } from '@/components/confirm-dialog';
 import { toast } from 'sonner';
-import { formatGroupMultiplier, getKeyDisplayName, getKeyGroupLabel } from '@/lib/key-display';
 import { beginLatestRequest } from '@/lib/request-sequence';
 import {
   UpstreamsDataTable,
@@ -24,7 +22,8 @@ import { buildUpstreamListSearchParams } from '@/lib/upstream-query';
 import { PageHeader } from '@/components/page-header';
 import { getOfficialModelPrice } from '@/lib/official-model-prices';
 import { findNewEnabledModels, runNewModelTests } from '@/lib/new-model-testing';
-import { formatLatencySeconds } from '@/lib/latency-display';
+import { EditUpstreamDialog } from '@/components/edit-upstream-dialog';
+import { UpstreamKeyManager } from '@/components/upstream-key-manager';
 
 type UpstreamKey = UpstreamKeyRow;
 type Upstream = UpstreamRow;
@@ -143,13 +142,6 @@ function draftGroupRequest(draft: DraftGroup) {
         enabled: model.enabled,
       })),
   };
-}
-
-function formatKeyModels(key: UpstreamKey) {
-  const names = (key.monitoredModels || []).filter((model) => model.enabled).map((model) => model.modelName);
-  if (names.length === 0) return key.testModel || '未配置';
-  if (names.length === 1) return names[0];
-  return `${names.length} 个模型`;
 }
 
 export default function UpstreamsPage() {
@@ -370,7 +362,28 @@ export default function UpstreamsPage() {
       />
 
       {showForm && (
-        <UpstreamFormDialog upstream={editing} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); fetchData(); }} />
+        editing ? (
+          <EditUpstreamDialog
+            upstream={editing}
+            onClose={() => {
+              setShowForm(false);
+              void fetchData(true);
+            }}
+            onSaved={() => {
+              setShowForm(false);
+              return fetchData();
+            }}
+          />
+        ) : (
+          <UpstreamFormDialog
+            upstream={null}
+            onClose={() => setShowForm(false)}
+            onSaved={() => {
+              setShowForm(false);
+              fetchData();
+            }}
+          />
+        )
       )}
     </div>
   );
@@ -725,7 +738,7 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
         {upstream && (
           <>
             <Separator />
-            <KeyManager
+            <UpstreamKeyManager
               upstreamId={upstream.id}
               type={type}
               onEditKey={(key) => setKeyEditor({ key })}
@@ -736,157 +749,5 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ============ 分组 Keys 管理器 ============
-function KeyManager({ upstreamId, type, onEditKey }: {
-  upstreamId: number;
-  type: string;
-  onEditKey: (key: UpstreamKey | null) => void;
-}) {
-  const { confirm, dialog } = useConfirm();
-  const [keys, setKeys] = useState<UpstreamKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshingKeyId, setRefreshingKeyId] = useState<number | null>(null);
-
-  const fetchKeys = useCallback(async () => {
-    const res = await fetch(`/api/upstreams/${upstreamId}/keys`);
-    setKeys(await res.json());
-    setLoading(false);
-  }, [upstreamId]);
-
-  useEffect(() => { fetchKeys(); }, [fetchKeys]);
-
-  async function handleDeleteKey(keyId: number, group: string) {
-    const ok = await confirm({
-      title: `删除分组「${group}」？`,
-      description: '该分组的所有指标数据将被删除。',
-      destructive: true,
-      confirmText: '删除',
-    });
-    if (!ok) return;
-    await fetch(`/api/upstreams/${upstreamId}/keys/${keyId}`, { method: 'DELETE' });
-    toast.success(`已删除分组 ${group}`);
-    fetchKeys();
-  }
-
-  async function handleTestKey(keyId: number, group: string) {
-    const tid = toast.loading(`正在测试 ${group}…`);
-    try {
-      const res = await fetch(`/api/keys/${keyId}/test`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(`${group}: ${data.error}`, { id: tid });
-      } else if (data.modelTestOk === true) {
-        const latency = data.modelTestLatMs ?? data.latencyMs;
-        toast.success(`${group}: API 测试成功${latency != null ? `，延迟 ${formatLatencySeconds(latency)}` : ''}`, { id: tid });
-      } else {
-        toast.error(`${group}: API 测试失败${data.errorMessage ? `，${data.errorMessage}` : ''}`, { id: tid });
-      }
-      fetchKeys();
-    } catch (e) { toast.error((e as Error).message, { id: tid }); }
-  }
-
-  async function handleRefreshKey(key: UpstreamKey) {
-    setRefreshingKeyId(key.id);
-    try {
-      const res = await fetch(`/api/keys/${key.id}/metadata`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || '远端信息获取失败');
-        return;
-      }
-      toast.success('远端信息已更新');
-      await fetchKeys();
-    } catch (e) {
-      toast.error('请求失败: ' + (e as Error).message);
-    } finally {
-      setRefreshingKeyId(null);
-    }
-  }
-
-  if (loading) return <div className="text-sm text-muted-foreground">加载分组…</div>;
-
-  return (
-    <div className="space-y-3">
-      {dialog}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5"><KeyRound className="h-4 w-4" />分组</h3>
-        <Button size="sm" variant="outline" onClick={() => onEditKey(null)}>
-          <Plus data-icon="inline-start" />
-          添加分组
-        </Button>
-      </div>
-      {keys.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">暂无分组</p>
-      ) : (
-        <div className="space-y-2">
-          {keys.map((k) => (
-            <div key={k.id} className="flex flex-col items-stretch gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-2">
-                <StatusDot status={k.status} />
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium" title={getKeyDisplayName(k)}>
-                    {k.group}
-                  </div>
-                  {k.label && k.label !== k.group ? <div className="truncate text-xs text-muted-foreground">备注：{k.label}</div> : null}
-                  <div className="break-words text-xs text-muted-foreground">
-                    {type === 'NEW_API' && (
-                      <>
-                        分组：{getKeyGroupLabel(k)} · 倍率：{formatGroupMultiplier(k.groupRateMultiplier)}
-                        {k.groupDescription ? ` · ${k.groupDescription}` : ''}
-                        {' · '}
-                      </>
-                    )}
-                    模型：{formatKeyModels(k)} ·
-                    {k.hasApiKey ? 'Key' : '无Key'}
-                    {type === 'NEW_API' && (k.hasAccessToken ? ' + 令牌' : ' + 无令牌')}
-                  </div>
-                </div>
-              </div>
-              <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:shrink-0">
-                {type === 'NEW_API' && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label="重新获取远端信息"
-                    title="重新获取远端信息"
-                    disabled={refreshingKeyId === k.id}
-                    onClick={() => handleRefreshKey(k)}
-                  >
-                    <RefreshCw data-icon="inline-start" className={refreshingKeyId === k.id ? 'animate-spin' : undefined} />
-                    {refreshingKeyId === k.id ? '刷新中…' : '刷新'}
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  title="只测试本组轮换到的一个模型，会消耗少量 Token"
-                  onClick={() => handleTestKey(k.id, k.group)}
-                >
-                  <Zap data-icon="inline-start" />
-                  测试本组
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => onEditKey(k)}>
-                  <Pencil data-icon="inline-start" />
-                  编辑
-                </Button>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="text-destructive"
-                  aria-label={`删除分组 ${k.group}`}
-                  title={`删除分组 ${k.group}`}
-                  onClick={() => handleDeleteKey(k.id, k.group)}
-                >
-                  <Trash2 data-icon="inline-start" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }

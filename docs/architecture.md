@@ -15,6 +15,7 @@
 ```mermaid
 flowchart LR
   User["本机浏览器"] -->|"本机访问"| App["Next.js 应用"]
+  Scheduler["应用内单机调度器"] -->|"每分钟触发"| App
   Cron["系统 Cron / 调度平台"] -->|"Bearer CRON_SECRET"| App
   App -->|"Prisma"| DB["SQLite 文件"]
   App -->|"适配器请求"| Upstream["SUB2API / New API 上游"]
@@ -24,6 +25,8 @@ flowchart LR
 Next.js 14.2.35 同时承载界面、API Route 和服务端业务逻辑。运行时要求 Node.js 22.5 以上，初始化脚本使用内置 `node:sqlite`。SQLite 是单机持久化数据源；本地运行时由应用内调度器每分钟触发，也可由外部 Cron 调用鉴权端点。应用负责决定本轮执行轻量还是重量采集。
 
 自动采集、单模型测试、站点测试和测试全部共享进程内凭证队列。队列键由标准化站点地址和解密后的 API 凭证生成哈希：同一凭证跨请求串行，不同凭证并行。自动轮次之间仍互斥，避免调度积压；手动任务可与自动轮次并行，并在命中同一凭证时等待前序任务完成。
+
+Windows 安装脚本会创建 `Start RelayScope` 与 `Stop RelayScope` 桌面快捷方式。启动脚本只接受由当前项目目录启动、监听 `127.0.0.1:3000` 的 Next.js 进程，并把核验后的监听进程 ID 写入 Git 忽略的 `.relayscope.pid`；关闭脚本会再次核验 PID、端口和项目路径后停止该进程。关闭浏览器不会停止服务，只有关闭 RelayScope 进程后，应用内自动监测才会停止。项目目录移动后应重新运行安装脚本，以刷新快捷方式目标。
 
 ## 模块边界
 
@@ -107,14 +110,14 @@ erDiagram
 
 ```mermaid
 sequenceDiagram
-  participant Cron as 外部调度器
+  participant Trigger as 应用内调度器 / 外部 Cron
   participant API as /api/cron/collect
   participant Collector as Collector
   participant Adapter as Upstream Adapter
   participant DB as SQLite
   participant Alert as Alert Engine
 
-  Cron->>API: GET + Bearer CRON_SECRET
+  Trigger->>API: 触发采集
   API->>Collector: runCollectCycle()
   Collector->>DB: 读取启用的上游和 Key
   loop 每个启用的 Key
@@ -126,10 +129,10 @@ sequenceDiagram
     Collector->>Alert: 评估告警规则
   end
   Collector->>DB: 聚合并更新上游状态
-  API-->>Cron: 采集数量、模式和耗时
+  API-->>Trigger: 采集数量、模式和耗时
 ```
 
-外部调度器建议每分钟请求一次。当前采集器按“重量采集间隔”决定本轮模式：
+本地单机运行时，应用内调度器每分钟触发一次；外部部署也可用 `CRON_SECRET` 鉴权后每分钟请求一次 `/api/cron/collect`。两种入口最终使用同一套采集与自动轮次互斥逻辑。当前采集器按“重量采集间隔”决定本轮模式：
 
 - `light`：查询余额和 `/v1/models` 延迟，不发送生成请求。
 - `heavy`：包含 light 的全部检查，并执行非流式与流式模型测试。
@@ -241,7 +244,8 @@ interface UpstreamAdapter {
 
 - SQLite 数据库适合单机自用；多人或多实例部署不在当前范围内。
 - 重量测试会消耗上游额度，应使用较低频率和低成本模型。
-- 应用进程不内置可靠的分布式调度器，生产环境应使用系统 cron 或外部调度平台。
+- 应用内调度器只适用于当前单进程、单机部署；进程停止后调度也会停止，不提供分布式调度或跨进程选主保证。
+- 当前官方支持边界是本机或可信内网单实例；若自行改造成多实例部署，应关闭重复入口并改用一个系统 cron 或外部调度平台。
 - 多实例部署时，外部调度器只应触发一个入口，避免重复采集和重复告警。
 - 删除上游属于破坏性操作，生产操作前应确保数据库备份可恢复。
 

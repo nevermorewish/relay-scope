@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
-  KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog, Plus, Pencil,
+  KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog, Pencil,
 } from 'lucide-react';
 import {
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -22,9 +22,9 @@ import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { StatusBadge } from '@/components/StatusBadge';
-import { AddUpstreamGroupDialog } from '@/components/add-upstream-group-dialog';
 import { useConfirm } from '@/components/confirm-dialog';
 import { PageHeader } from '@/components/page-header';
+import { EditUpstreamDialog } from '@/components/edit-upstream-dialog';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { beginLatestRequest } from '@/lib/request-sequence';
@@ -120,8 +120,7 @@ export default function UpstreamDetailPage() {
   const [testingModelId, setTestingModelId] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [groupEditor, setGroupEditor] = useState<UpstreamKey | null | undefined>(undefined);
-  const [deletingKeyId, setDeletingKeyId] = useState<number | null>(null);
+  const [editingUpstream, setEditingUpstream] = useState(false);
   const baseRequestSequence = useRef(0);
   const metricRequestSequence = useRef(0);
   const actionInFlight = useRef(false);
@@ -314,30 +313,6 @@ export default function UpstreamDetailPage() {
     }
   }
 
-  async function handleDeleteGroup(key: UpstreamKey) {
-    if (!upstream || deletingKeyId != null) return;
-    const ok = await confirm({
-      title: `删除分组「${key.group}」？`,
-      description: '该分组的监测模型、历史指标和关联数据将一并删除，不可恢复。',
-      destructive: true,
-      confirmText: '删除',
-    });
-    if (!ok) return;
-
-    setDeletingKeyId(key.id);
-    try {
-      const response = await fetch(`/api/upstreams/${upstream.id}/keys/${key.id}`, { method: 'DELETE' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || '删除分组失败');
-      toast.success(`已删除分组 ${key.group}`);
-      await fetchBase();
-    } catch (deleteError) {
-      toast.error((deleteError as Error).message);
-    } finally {
-      setDeletingKeyId(null);
-    }
-  }
-
   // ============ 派生数据 ============
 
   const totalBalance = useMemo(
@@ -393,19 +368,19 @@ export default function UpstreamDetailPage() {
   return (
     <div className="space-y-6">
       {confirmDialog}
-      {groupEditor !== undefined ? (
-        <AddUpstreamGroupDialog
-          upstreamId={upstream.id}
-          upstreamType={upstream.type}
-          baseUrl={upstream.baseUrl}
-          keyData={groupEditor}
-          onClose={() => setGroupEditor(undefined)}
-          onSaved={() => {
-            setGroupEditor(undefined);
+      {editingUpstream && (
+        <EditUpstreamDialog
+          upstream={upstream}
+          onClose={() => {
+            setEditingUpstream(false);
             void fetchBase().catch((error) => toast.error((error as Error).message));
           }}
+          onSaved={async () => {
+            setEditingUpstream(false);
+            await fetchBase();
+          }}
         />
-      ) : null}
+      )}
       {/* ====== 面包屑 ====== */}
       <Breadcrumb>
         <BreadcrumbList>
@@ -433,6 +408,10 @@ export default function UpstreamDetailPage() {
         }
         actions={
           <>
+            <Button size="sm" variant="outline" onClick={() => setEditingUpstream(true)}>
+              <Pencil data-icon="inline-start" />
+              编辑站点
+            </Button>
             <Button size="sm" onClick={handleTest} disabled={testing || refreshing || testingModelId != null}>
               {testing ? (
                 <Loader2 data-icon="inline-start" className="animate-spin" />
@@ -481,34 +460,25 @@ export default function UpstreamDetailPage() {
           <TabsTrigger value="incidents">告警历史</TabsTrigger>
         </TabsList>
 
-        {/* ---- 分组详情 ---- */}
-        <TabsContent value="groups" className="space-y-3">
-          <div className="flex justify-end">
-            <Button size="sm" variant="outline" onClick={() => setGroupEditor(null)}>
-              <Plus data-icon="inline-start" />
-              添加分组
-            </Button>
-          </div>
-          {keys.length === 0 ? (
-            <Card>
-              <CardContent className="p-10 text-center text-muted-foreground">
-                该上游暂无分组，请点击上方“添加分组”完成配置
-              </CardContent>
-            </Card>
+          {/* ---- 分组详情 ---- */}
+          <TabsContent value="groups" className="space-y-3">
+            {keys.length === 0 ? (
+              <Card>
+                <CardContent className="p-10 text-center text-muted-foreground">
+                  该上游暂无分组，请通过“编辑站点”完成配置
+                </CardContent>
+              </Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {keys.map((k) => (
                 <GroupCard
                   key={k.id}
                   k={k}
-                  upstreamType={upstream.type}
-                  testingModelId={testingModelId}
-                  testDisabled={testing || refreshing || testingModelId != null}
-                  deleting={deletingKeyId === k.id}
-                  onEdit={() => setGroupEditor(k)}
-                  onDelete={() => void handleDeleteGroup(k)}
-                  onTestModel={handleTestModel}
-                />
+                    upstreamType={upstream.type}
+                    testingModelId={testingModelId}
+                    testDisabled={testing || refreshing || testingModelId != null}
+                    onTestModel={handleTestModel}
+                  />
               ))}
             </div>
           )}
@@ -739,14 +709,11 @@ function SummaryCard({ icon, label, value, tone }: {
   );
 }
 
-function GroupCard({ k, upstreamType, testingModelId, testDisabled, deleting, onEdit, onDelete, onTestModel }: {
+function GroupCard({ k, upstreamType, testingModelId, testDisabled, onTestModel }: {
   k: UpstreamKey;
   upstreamType: string;
   testingModelId: number | null;
   testDisabled: boolean;
-  deleting: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
   onTestModel: (keyId: number, modelId: number, modelName: string) => void;
 }) {
   return (
@@ -763,21 +730,6 @@ function GroupCard({ k, upstreamType, testingModelId, testDisabled, deleting, on
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={onEdit}>
-            <Pencil data-icon="inline-start" />
-            编辑
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            className="text-destructive"
-            disabled={deleting}
-            aria-label={`删除分组 ${k.group}`}
-            title={`删除分组 ${k.group}`}
-            onClick={onDelete}
-          >
-            {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
-          </Button>
           <StatusBadge status={k.status} />
         </div>
       </CardHeader>

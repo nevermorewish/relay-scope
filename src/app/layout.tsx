@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
-  title: "RelayScope · AI API 监测台",
+  title: "RelayScope · LLM API 监测台",
   description: "自托管的 AI API、中转站与模型服务监测面板",
 };
 

@@ -80,7 +80,7 @@ function SidebarContent({
           </span>
           <div className="min-w-0">
             <div className="truncate text-sm font-bold leading-tight">RelayScope</div>
-            <div className="truncate text-[10px] text-muted-foreground">AI API 监测台</div>
+            <div className="truncate text-[10px] text-muted-foreground">LLM API 监测台</div>
           </div>
         </div>
         <ThemeToggleButton />

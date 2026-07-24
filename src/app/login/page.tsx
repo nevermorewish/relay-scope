@@ -43,7 +43,7 @@ function LoginForm() {
             <Activity className="h-7 w-7" />
           </div>
           <h1 className="text-xl font-bold">RelayScope</h1>
-          <p className="mt-1 text-sm text-muted-foreground">AI API 监测台</p>
+          <p className="mt-1 text-sm text-muted-foreground">LLM API 监测台</p>
         </div>
 
         <Card>

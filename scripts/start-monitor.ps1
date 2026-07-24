@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $monitorUrl = 'http://127.0.0.1:3000'
-$launcherMutex = [System.Threading.Mutex]::new($false, 'Local\RelayMonitorLauncher')
+$pidPath = Join-Path $projectRoot '.relayscope.pid'
+$launcherMutex = [System.Threading.Mutex]::new($false, 'Local\RelayScopeLauncher')
 $hasLauncherLock = $false
 
 function Test-MonitorReady {
@@ -11,6 +12,30 @@ function Test-MonitorReady {
     return $response.StatusCode -eq 200 -and $response.Content -match 'RelayScope'
   } catch {
     return $false
+  }
+}
+
+function Get-RelayScopeListener {
+  $connections = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+  foreach ($connection in $connections) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($connection.OwningProcess)" -ErrorAction SilentlyContinue
+    if ($process -and $process.CommandLine -and
+        $process.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $process.CommandLine -match 'next|node_modules') {
+      return $process
+    }
+  }
+  return $null
+}
+
+function Save-RelayScopePid {
+  $listener = Get-RelayScopeListener
+  if ($listener) {
+    [System.IO.File]::WriteAllText(
+      $pidPath,
+      [string]$listener.ProcessId,
+      [System.Text.Encoding]::ASCII
+    )
   }
 }
 
@@ -55,6 +80,7 @@ try {
     }
   }
 
+  Save-RelayScopePid
   Start-Process $monitorUrl
 } finally {
   if ($hasLauncherLock) { $launcherMutex.ReleaseMutex() }

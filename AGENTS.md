@@ -4,7 +4,7 @@
 
 ## 项目是什么
 
-- 名称：RelayScope（AI API 监测台）
+- 名称：RelayScope（LLM API 监测台）
 - 用途：自托管的 AI API、中转站与模型服务监测面板（余额、价格、延迟、模型测试、告警）
 - 栈：Next.js 14.2.35 App Router + TypeScript + Prisma + SQLite + Tailwind
 - 运行时：Node.js >= 22.5（初始化脚本使用 `node:sqlite`）
@@ -26,7 +26,7 @@ pnpm test
 pnpm build
 ```
 
-Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装；后续双击 `Start RelayScope.cmd` 启动生产服务并打开网页。
+Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌面快捷方式；后续使用 `Start RelayScope.cmd` 启动、`Stop RelayScope.cmd` 关闭。
 
 ## 关键路径
 
@@ -38,7 +38,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装；后续双
 | 上游适配器 | `src/lib/adapters/` |
 | 数据模型 | `prisma/schema.prisma`（provider = sqlite） |
 | 初始化脚本 | `scripts/init-sqlite.mjs` |
-| Windows 安装与启动 | `scripts/setup-windows.ps1`, `scripts/start-monitor.ps1` |
+| Windows 安装与启停 | `scripts/setup-windows.ps1`, `scripts/start-monitor.ps1`, `scripts/stop-monitor.ps1` |
 | 文档 | `README.md`, `docs/architecture.md` |
 
 ## 环境变量（事实）

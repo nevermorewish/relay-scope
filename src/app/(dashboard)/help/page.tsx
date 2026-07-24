@@ -299,6 +299,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <Faq question="为什么能测试模型，却仍提示需配置？">API Key 足以完成生成测试，但部分 New API 平台还需要 Access Token 和用户 ID 才能读取余额、消费日志和动态倍率。</Faq>
           <Faq question="为什么价格显示未录入？">内置价格库没有匹配模型名称，或动态平台尚未产生可用于反推价格的消费日志。请检查模型名称格式或手动填写官方价格。</Faq>
           <Faq question="自动监测为什么没有运行？">确认网站服务正在运行、自动监测开关已开启、站点和分组没有暂停。关闭网站服务后，本机后台调度也会停止。</Faq>
+          <Faq question="Windows 如何完全关闭 RelayScope？">双击桌面的“Stop RelayScope”快捷方式，或项目目录中的 <code>Stop RelayScope.cmd</code>。只关闭浏览器页面不会停止服务；停止服务后自动监测也会停止。</Faq>
           <Faq question="监测数据会一直占用硬盘吗？">会持续产生少量指标记录，但系统每天清理超过数据保留天数的明细。可在设置中调整保留天数。</Faq>
           <Faq question="可以把监测面板直接放到公网吗？">不建议。面板包含 API 凭证、余额和测试操作，官方配置只面向本机或可信内网。源码可以自行修改，但远程部署的认证和网络安全需要部署者自行负责。</Faq>
         </div>

@@ -86,9 +86,11 @@ try {
   & $pnpmCommand.Source build
   if ($LASTEXITCODE -ne 0) { throw 'Production build failed' }
 
+  & (Join-Path $PSScriptRoot 'create-windows-shortcuts.ps1')
+
   Add-Type -AssemblyName PresentationFramework
   [System.Windows.MessageBox]::Show(
-    'Setup completed. Double-click "Start RelayScope.cmd" to start RelayScope and open the dashboard.',
+    'Setup completed. Start and Stop RelayScope shortcuts were added to the desktop.',
     'RelayScope Setup',
     'OK',
     'Information'
