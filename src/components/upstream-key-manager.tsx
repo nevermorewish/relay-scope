@@ -1,14 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { KeyRound, Pencil, Plus, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/StatusBadge';
 import { useConfirm } from '@/components/confirm-dialog';
 import type { UpstreamKeyRow } from '@/components/upstreams-columns';
 import { formatGroupMultiplier, getKeyDisplayName, getKeyGroupLabel } from '@/lib/key-display';
-import { formatLatencySeconds } from '@/lib/latency-display';
 
 function formatKeyModels(key: UpstreamKeyRow) {
   const names = (key.monitoredModels || [])
@@ -66,31 +65,6 @@ export function UpstreamKeyManager({
     }
     toast.success(`已删除分组 ${group}`);
     await fetchKeys();
-  }
-
-  async function handleTestKey(keyId: number, group: string) {
-    const toastId = toast.loading(`正在测试 ${group}…`);
-    try {
-      const response = await fetch(`/api/keys/${keyId}/test`, { method: 'POST' });
-      const result = await response.json();
-      if (!response.ok) {
-        toast.error(`${group}: ${result.error}`, { id: toastId });
-      } else if (result.modelTestOk === true) {
-        const latency = result.modelTestLatMs ?? result.latencyMs;
-        toast.success(
-          `${group}: API 测试成功${latency != null ? `，延迟 ${formatLatencySeconds(latency)}` : ''}`,
-          { id: toastId },
-        );
-      } else {
-        toast.error(
-          `${group}: API 测试失败${result.errorMessage ? `，${result.errorMessage}` : ''}`,
-          { id: toastId },
-        );
-      }
-      await fetchKeys();
-    } catch (error) {
-      toast.error((error as Error).message, { id: toastId });
-    }
   }
 
   async function handleRefreshKey(key: UpstreamKeyRow) {
@@ -175,15 +149,6 @@ export function UpstreamKeyManager({
                     {refreshingKeyId === key.id ? '刷新中…' : '刷新'}
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  title="只测试本组轮换到的一个模型，会消耗少量 Token"
-                  onClick={() => handleTestKey(key.id, key.group)}
-                >
-                  <Zap data-icon="inline-start" />
-                  测试本组
-                </Button>
                 <Button size="sm" variant="ghost" onClick={() => onEditKey(key)}>
                   <Pencil data-icon="inline-start" />
                   编辑

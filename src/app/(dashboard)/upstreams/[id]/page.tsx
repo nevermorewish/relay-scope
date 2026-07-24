@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
-  ArrowLeft, Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
+  Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
   KeyRound, Activity, Trash2, Loader2, Gauge, ServerCog, Pencil,
 } from 'lucide-react';
 import {
@@ -18,6 +17,9 @@ import {
   Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
@@ -407,34 +409,36 @@ export default function UpstreamDetailPage() {
           </>
         }
         actions={
-          <>
-            <Button size="sm" variant="outline" onClick={() => setEditingUpstream(true)}>
-              <Pencil data-icon="inline-start" />
-              编辑站点
-            </Button>
-            <Button size="sm" onClick={handleTest} disabled={testing || refreshing || testingModelId != null}>
-              {testing ? (
-                <Loader2 data-icon="inline-start" className="animate-spin" />
-              ) : (
-                <Zap data-icon="inline-start" />
-              )}
-              {testing ? '测试中…' : '立即测试'}
-            </Button>
-            <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || testing}>
-              <RefreshCw data-icon="inline-start" className={cn(refreshing && 'animate-spin')} />
-              {refreshing ? '刷新中…' : '刷新'}
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/upstreams">
-                <ArrowLeft data-icon="inline-start" />
-                返回
-              </Link>
-            </Button>
-            <Button size="sm" variant="destructive" onClick={handleDelete}>
-              <Trash2 data-icon="inline-start" />
-              删除
-            </Button>
-          </>
+          <TooltipProvider delayDuration={300}>
+            <ActionTooltip label="编辑站点信息、分组和模型">
+              <Button size="sm" variant="outline" onClick={() => setEditingUpstream(true)}>
+                <Pencil data-icon="inline-start" />
+                编辑站点
+              </Button>
+            </ActionTooltip>
+            <ActionTooltip label="完整测试所有启用分组，会消耗少量 Token">
+              <Button size="sm" onClick={handleTest} disabled={testing || refreshing || testingModelId != null}>
+                {testing ? (
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                ) : (
+                  <Zap data-icon="inline-start" />
+                )}
+                {testing ? '测试中…' : '立即测试'}
+              </Button>
+            </ActionTooltip>
+            <ActionTooltip label="更新余额和基础连通状态，不发送生成请求">
+              <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || testing}>
+                <RefreshCw data-icon="inline-start" className={cn(refreshing && 'animate-spin')} />
+                {refreshing ? '刷新中…' : '刷新'}
+              </Button>
+            </ActionTooltip>
+            <ActionTooltip label="删除站点及其分组、指标和告警数据">
+              <Button size="sm" variant="destructive" onClick={handleDelete}>
+                <Trash2 data-icon="inline-start" />
+                删除
+              </Button>
+            </ActionTooltip>
+          </TooltipProvider>
         }
         actionsClassName="grid w-full grid-cols-2 sm:flex sm:w-auto"
       />
@@ -670,6 +674,19 @@ const tooltipLabelStyle = {
 const tooltipItemStyle = {
   color: 'hsl(var(--popover-foreground))',
 } as const;
+
+function ActionTooltip({ label, children }: { label: string; children: React.ReactElement }) {
+  return (
+    <UiTooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex [&>button]:w-full sm:[&>button]:w-auto">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-72 text-center">
+        {label}
+      </TooltipContent>
+    </UiTooltip>
+  );
+}
 
 function preventChartFocus(event: React.MouseEvent<HTMLDivElement>) {
   event.preventDefault();
