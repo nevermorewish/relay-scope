@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
-  KeyRound, Activity, Trash2, Loader2, ServerCog, Pencil, CircleDollarSign,
+  KeyRound, Activity, Trash2, Loader2, ServerCog, Pencil,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,12 @@ interface Incident {
   upstreamKey?: { id: number; group: string } | null;
 }
 
+interface CostResponse {
+  summary?: {
+    todayCostCny?: number;
+  };
+}
+
 // ============ 页面 ============
 
 export default function UpstreamDetailPage() {
@@ -100,6 +106,7 @@ export default function UpstreamDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingUpstream, setEditingUpstream] = useState(false);
+  const [todayCostCny, setTodayCostCny] = useState<number | null>(null);
   const baseRequestSequence = useRef(0);
   const actionInFlight = useRef(false);
 
@@ -110,9 +117,15 @@ export default function UpstreamDetailPage() {
     const isCurrent = beginLatestRequest(baseRequestSequence);
     const id = params.id;
     try {
-      const [uRes, iRes] = await Promise.all([
+      const [uRes, iRes, costResult] = await Promise.all([
         fetch(`/api/upstreams/${id}`, { cache: 'no-store' }),
         fetch(`/api/incidents?upstreamId=${id}&limit=50`, { cache: 'no-store' }),
+        fetch(
+          `/api/costs?upstreamId=${id}&timezoneOffset=${new Date().getTimezoneOffset()}`,
+          { cache: 'no-store' },
+        )
+          .then(async (response): Promise<CostResponse | null> => response.ok ? response.json() : null)
+          .catch(() => null),
       ]);
       const [nextUpstream, nextIncidents] = await Promise.all([
         uRes.json().catch(() => ({})),
@@ -123,6 +136,7 @@ export default function UpstreamDetailPage() {
       if (!isCurrent()) return false;
       setUpstream(nextUpstream);
       setIncidents(Array.isArray(nextIncidents) ? nextIncidents : []);
+      setTodayCostCny(costResult?.summary?.todayCostCny ?? null);
       return true;
     } finally {
       if (isCurrent()) setLoading(false);
@@ -196,34 +210,14 @@ export default function UpstreamDetailPage() {
   }
 
   async function handleRefresh() {
-    if (!upstream || actionInFlight.current) return;
-    actionInFlight.current = true;
+    if (refreshing) return;
     setRefreshing(true);
-    const tid = toast.loading(`正在刷新 ${upstream.name}…`);
     try {
-      const res = await fetch(`/api/upstreams/${upstream.id}/refresh`, { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast.error(data.error || '刷新失败', { id: tid });
-        return;
-      }
-      const total = data.results?.length || 0;
-      const success = data.successCount ?? data.results?.filter((item: { status: string }) => item.status === 'ok').length ?? 0;
-      const failed = data.failureCount ?? total - success;
       await fetchBase();
-      const message = `${upstream.name} 刷新完成：${success} 成功${failed > 0 ? `，${failed} 失败` : ''}`;
-      if (success === 0) {
-        toast.error(message, { id: tid });
-      } else if (failed > 0) {
-        toast.warning(message, { id: tid });
-      } else {
-        toast.success(message, { id: tid });
-      }
     } catch (error) {
-      toast.error('请求失败: ' + (error as Error).message, { id: tid });
+      toast.error((error as Error).message || '刷新失败');
     } finally {
       setRefreshing(false);
-      actionInFlight.current = false;
     }
   }
 
@@ -322,14 +316,6 @@ export default function UpstreamDetailPage() {
         }
         actions={
           <TooltipProvider delayDuration={300}>
-            <ActionTooltip label="查看该站点从建站后的累计费用和消费趋势">
-              <Button size="sm" variant="outline" asChild>
-                <a href={`/costs?upstreamId=${upstream.id}`}>
-                  <CircleDollarSign data-icon="inline-start" />
-                  费用
-                </a>
-              </Button>
-            </ActionTooltip>
             <ActionTooltip label="编辑站点信息、分组和模型">
               <Button size="sm" variant="outline" onClick={() => setEditingUpstream(true)}>
                 <Pencil data-icon="inline-start" />
@@ -337,7 +323,7 @@ export default function UpstreamDetailPage() {
               </Button>
             </ActionTooltip>
             <ActionTooltip label="完整测试所有启用分组，会消耗少量 Token">
-              <Button size="sm" onClick={handleTest} disabled={testing || refreshing || testingModelId != null}>
+              <Button size="sm" onClick={handleTest} disabled={testing || testingModelId != null}>
                 {testing ? (
                   <Loader2 data-icon="inline-start" className="animate-spin" />
                 ) : (
@@ -346,10 +332,10 @@ export default function UpstreamDetailPage() {
                 {testing ? '测试中…' : '立即测试'}
               </Button>
             </ActionTooltip>
-            <ActionTooltip label="更新余额和基础连通状态，不发送生成请求">
-              <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || testing}>
+            <ActionTooltip label="重新读取最新站点数据，不会主动采集站点或测试模型">
+              <Button size="sm" variant="outline" onClick={handleRefresh} disabled={refreshing || loading}>
                 <RefreshCw data-icon="inline-start" className={cn(refreshing && 'animate-spin')} />
-                {refreshing ? '刷新中…' : '刷新'}
+                刷新
               </Button>
             </ActionTooltip>
             <ActionTooltip label="删除站点及其分组、指标和告警数据">
@@ -364,9 +350,11 @@ export default function UpstreamDetailPage() {
       />
 
       {/* ====== 汇总指标 ====== */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard icon={<Wallet className="h-4 w-4" />} label="账户余额"
           value={totalBalance == null ? '—' : `¥${totalBalance.toFixed(2)}`} />
+        <SummaryCard icon={<Wallet className="h-4 w-4" />} label="今日消费"
+          value={todayCostCny == null ? '—' : `¥${todayCostCny.toFixed(2)}`} />
         <SummaryCard icon={<KeyRound className="h-4 w-4" />} label="分组数"
           value={String(keys.length)} />
         <SummaryCard icon={<Activity className="h-4 w-4" />} label="监测模型"

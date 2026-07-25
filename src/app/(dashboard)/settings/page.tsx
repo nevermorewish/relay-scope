@@ -17,7 +17,6 @@ import {
   Settings,
   Eye,
   EyeOff,
-  AlertTriangle,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -635,10 +634,6 @@ function SystemTab() {
       <p className="text-sm text-muted-foreground">
         采集频率配置。轻量采集（余额+延迟）建议 1 分钟，重量采集（模型实测+流式测速）建议 15 分钟以免消耗过多额度。
       </p>
-      <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <span>费用提醒：重量采集和手动模型测试会发送真实 API 请求，产生少量 Token 消耗和费用；轻量检查不会发送生成请求。</span>
-      </div>
 
       <Card>
         <CardHeader>

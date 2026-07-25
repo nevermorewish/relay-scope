@@ -93,7 +93,7 @@ export default function CostsPage() {
     <PageHeader
       icon={CircleDollarSign}
       title="费用观测"
-      description="总消费按建站后的共享账户余额下降量计算；充值和余额增加不会抵消历史消费。"
+      description="总消费按建站后的共享账户余额下降量计算；充值和余额增加不会抵消历史消费。模型测试会产生少量费用。"
       actions={<TooltipProvider delayDuration={300}>
         <UiTooltip>
           <TooltipTrigger asChild>
