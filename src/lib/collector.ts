@@ -38,9 +38,10 @@ export async function collectOneKey(
   mode: CollectMode,
   monitoredModelId?: number,
   lightResultsCache?: Map<string, Promise<LightCollectionResult>>,
+  laneSuffix?: string,
 ) {
   return withCredentialLane(
-    credentialLaneKey({ upstream: key.upstream, key }),
+    [credentialLaneKey({ upstream: key.upstream, key }), laneSuffix].filter(Boolean).join(':'),
     () => collectOneKeyInLane(key, mode, monitoredModelId, lightResultsCache),
   );
 }
@@ -285,10 +286,13 @@ export async function collectUpstreamsByCredential(
   );
 
   await Promise.all(upstreams.map((upstream) => refreshUpstreamAggregateStatus(upstream.id)));
-  await Promise.all(upstreams.map((upstream) => syncSiteBalanceCosts({
-    upstreamId: upstream.id,
-    creditUsdPerCny: upstream.creditUsdPerCny,
-  }).catch((error) => {
+  await Promise.all(upstreams.map((upstream) => withCredentialLane(
+    `site-cost:${upstream.id}`,
+    () => syncSiteBalanceCosts({
+      upstreamId: upstream.id,
+      creditUsdPerCny: upstream.creditUsdPerCny,
+    }),
+  ).catch((error) => {
     console.warn('[cost] balance cost sync failed:', error instanceof Error ? error.message : error);
   })));
   return jobs.map((job, index) => ({
@@ -391,11 +395,20 @@ export async function collectOneKeyManual(keyId: number, monitoredModelId?: numb
     });
     if (!model) throw new Error('模型不存在或未启用');
   }
-  const metric = await collectOneKey(key, 'heavy', monitoredModelId);
-  await syncSiteBalanceCosts({
-    upstreamId: key.upstreamId,
-    creditUsdPerCny: key.upstream.creditUsdPerCny,
-  }).catch((error) => {
+  const metric = await collectOneKey(
+    key,
+    'heavy',
+    monitoredModelId,
+    undefined,
+    `manual:${keyId}:${monitoredModelId ?? 'default'}`,
+  );
+  await withCredentialLane(
+    `site-cost:${key.upstreamId}`,
+    () => syncSiteBalanceCosts({
+      upstreamId: key.upstreamId,
+      creditUsdPerCny: key.upstream.creditUsdPerCny,
+    }),
+  ).catch((error) => {
     console.warn('[cost] balance cost sync failed:', error instanceof Error ? error.message : error);
   });
   await refreshUpstreamAggregateStatus(key.upstreamId);

@@ -26,15 +26,21 @@ function Show-RelayScopeMessage {
 function Test-RelayScopeListener {
   param([int]$ProcessId)
 
-  $connection = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
-    Where-Object { $_.OwningProcess -eq $ProcessId } |
-    Select-Object -First 1
-  if (-not $connection) { return $false }
+  if ((Get-ListenerProcessIds) -notcontains $ProcessId) { return $false }
 
   $process = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue
   return $process -and $process.CommandLine -and
     $process.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
     $process.CommandLine -match 'next|node_modules'
+}
+
+function Get-ListenerProcessIds {
+  $netstatPath = Join-Path $env:SystemRoot 'System32\netstat.exe'
+  & $netstatPath -ano -p tcp 2>$null | ForEach-Object {
+    if ($_ -match '^\s*TCP\s+\S+:3000\s+\S+\s+LISTENING\s+(\d+)\s*$') {
+      [int]$Matches[1]
+    }
+  }
 }
 
 function Find-RelayScopeListenerId {
@@ -46,10 +52,9 @@ function Find-RelayScopeListenerId {
     }
   }
 
-  $connections = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
-  foreach ($connection in $connections) {
-    if (Test-RelayScopeListener -ProcessId $connection.OwningProcess) {
-      return [int]$connection.OwningProcess
+  foreach ($listenerId in Get-ListenerProcessIds) {
+    if (Test-RelayScopeListener -ProcessId $listenerId) {
+      return [int]$listenerId
     }
   }
   return 0

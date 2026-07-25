@@ -102,13 +102,14 @@ export default function UpstreamDetailPage() {
   const [upstream, setUpstream] = useState<Upstream | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [testing, setTesting] = useState(false);
-  const [testingModelId, setTestingModelId] = useState<number | null>(null);
+  const [testingModelIds, setTestingModelIds] = useState<Set<number>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingUpstream, setEditingUpstream] = useState(false);
   const [todayCostCny, setTodayCostCny] = useState<number | null>(null);
   const baseRequestSequence = useRef(0);
-  const actionInFlight = useRef(false);
+  const testingAllRef = useRef(false);
+  const testingModelIdsRef = useRef<Set<number>>(new Set());
 
   const keys = useMemo(() => upstream?.keys || [], [upstream?.keys]);
 
@@ -148,8 +149,8 @@ export default function UpstreamDetailPage() {
   }, [fetchBase]);
 
   async function handleTest() {
-    if (!upstream || actionInFlight.current) return;
-    actionInFlight.current = true;
+    if (!upstream || testingAllRef.current) return;
+    testingAllRef.current = true;
     setTesting(true);
     const tid = toast.loading(`正在测试 ${upstream.name} 的所有分组…`);
     try {
@@ -168,14 +169,14 @@ export default function UpstreamDetailPage() {
       toast.error('请求失败: ' + (e as Error).message, { id: tid });
     } finally {
       setTesting(false);
-      actionInFlight.current = false;
+      testingAllRef.current = false;
     }
   }
 
   async function handleTestModel(keyId: number, modelId: number, modelName: string) {
-    if (actionInFlight.current) return;
-    actionInFlight.current = true;
-    setTestingModelId(modelId);
+    if (testingModelIdsRef.current.has(modelId)) return;
+    testingModelIdsRef.current.add(modelId);
+    setTestingModelIds(new Set(testingModelIdsRef.current));
     const tid = toast.loading(`正在测试 ${modelName}…`);
     try {
       const res = await fetch(`/api/keys/${keyId}/test`, {
@@ -204,8 +205,8 @@ export default function UpstreamDetailPage() {
     } catch (error) {
       toast.error((error as Error).message, { id: tid });
     } finally {
-      setTestingModelId(null);
-      actionInFlight.current = false;
+      testingModelIdsRef.current.delete(modelId);
+      setTestingModelIds(new Set(testingModelIdsRef.current));
     }
   }
 
@@ -323,7 +324,7 @@ export default function UpstreamDetailPage() {
               </Button>
             </ActionTooltip>
             <ActionTooltip label="完整测试所有启用分组，会消耗少量 Token">
-              <Button size="sm" onClick={handleTest} disabled={testing || testingModelId != null}>
+              <Button size="sm" onClick={handleTest} disabled={testing}>
                 {testing ? (
                   <Loader2 data-icon="inline-start" className="animate-spin" />
                 ) : (
@@ -383,8 +384,7 @@ export default function UpstreamDetailPage() {
                   key={k.id}
                   k={k}
                     upstreamType={upstream.type}
-                    testingModelId={testingModelId}
-                    testDisabled={testing || refreshing || testingModelId != null}
+                    testingModelIds={testingModelIds}
                     onTestModel={handleTestModel}
                   />
               ))}
@@ -478,11 +478,10 @@ function SummaryCard({ icon, label, value, tone }: {
   );
 }
 
-function GroupCard({ k, upstreamType, testingModelId, testDisabled, onTestModel }: {
+function GroupCard({ k, upstreamType, testingModelIds, onTestModel }: {
   k: UpstreamKey;
   upstreamType: string;
-  testingModelId: number | null;
-  testDisabled: boolean;
+  testingModelIds: Set<number>;
   onTestModel: (keyId: number, modelId: number, modelName: string) => void;
 }) {
   return (
@@ -534,12 +533,12 @@ function GroupCard({ k, upstreamType, testingModelId, testDisabled, onTestModel 
               <Button
                 size="icon-sm"
                 variant="ghost"
-                disabled={testDisabled}
+                disabled={testingModelIds.has(model.id)}
                 aria-label={`单独测试 ${model.modelName}`}
                 title="单独测试该模型，会消耗少量 Token"
                 onClick={() => onTestModel(k.id, model.id, model.modelName)}
               >
-                {testingModelId === model.id
+                {testingModelIds.has(model.id)
                   ? <Loader2 className="animate-spin" />
                   : <Zap />}
               </Button>

@@ -231,6 +231,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm">人民币价格 = 官方美元价格 × 分组倍率 ÷（1 元人民币获得的美元额度）</div>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>官方价格按每 100 万 Token 保存，输入和输出价格分别计算。</li>
+            <li>侧栏“模型资料库”可以按名称或厂商查询官方输入、输出、缓存价格、上下文和资料来源，并可切换美元或按固定参考汇率估算的人民币；目录随版本人工核验，不会联网自动更新。</li>
             <li>“1 元人民币获得的美元额度”填写 1，表示 ¥1 获得 $1 额度；填写 10，表示 ¥1 获得 $10 额度。</li>
             <li>A6API 等动态路由平台会优先使用真实消费日志反推实际倍率和价格，公开目录价格仅作参考。</li>
             <li>价格或倍率按两位小数显示后没有发生变化时，不会重复创建价格告警。</li>

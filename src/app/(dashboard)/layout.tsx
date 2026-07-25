@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Activity, LayoutDashboard, Server, Bell, Settings, BookOpen, LogOut, Menu, Sun, Moon, CircleDollarSign } from 'lucide-react';
+import { Activity, LayoutDashboard, Server, Bell, Settings, BookOpen, LogOut, Menu, Sun, Moon, CircleDollarSign, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/components/theme-provider';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/', label: '总览', icon: LayoutDashboard },
   { href: '/upstreams', label: '上游管理', icon: Server },
   { href: '/costs', label: '费用观测', icon: CircleDollarSign },
+  { href: '/models', label: '模型资料库', icon: Database },
   { href: '/incidents', label: '告警事件', icon: Bell },
 ];
 

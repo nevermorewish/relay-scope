@@ -26,9 +26,14 @@ function Test-MonitorReady {
 }
 
 function Get-RelayScopeListener {
-  $connections = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
-  foreach ($connection in $connections) {
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($connection.OwningProcess)" -ErrorAction SilentlyContinue
+  $netstatPath = Join-Path $env:SystemRoot 'System32\netstat.exe'
+  $listenerIds = & $netstatPath -ano -p tcp 2>$null | ForEach-Object {
+    if ($_ -match '^\s*TCP\s+\S+:3000\s+\S+\s+LISTENING\s+(\d+)\s*$') {
+      [int]$Matches[1]
+    }
+  }
+  foreach ($listenerId in $listenerIds) {
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerId" -ErrorAction SilentlyContinue
     if ($process -and $process.CommandLine -and
         $process.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
         $process.CommandLine -match 'next|node_modules') {
