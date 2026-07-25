@@ -10,13 +10,13 @@ $shortcuts = @(
     Name = 'Start RelayScope.lnk'
     Target = 'Start RelayScope.cmd'
     Description = 'Start RelayScope and open the dashboard'
-    Icon = "$env:SystemRoot\System32\shell32.dll,220"
+    Icon = (Join-Path $projectRoot 'assets\windows\relayscope-start-desktop-full.ico')
   },
   @{
     Name = 'Stop RelayScope.lnk'
     Target = 'Stop RelayScope.cmd'
     Description = 'Stop RelayScope and automatic monitoring'
-    Icon = "$env:SystemRoot\System32\shell32.dll,131"
+    Icon = (Join-Path $projectRoot 'assets\windows\relayscope-stop-desktop-full.ico')
   }
 )
 

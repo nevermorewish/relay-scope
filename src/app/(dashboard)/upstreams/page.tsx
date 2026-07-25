@@ -671,7 +671,7 @@ function UpstreamFormDialog({ upstream, onClose, onSaved }: {
                             list={`draft-models-${draft.clientId}`}
                             value={model.modelName}
                             onChange={(event) => updateDraftModelName(draft.clientId, model.clientId, event.target.value)}
-                            placeholder="gpt-5.6-sol"
+                            placeholder="如 qwen3.6-flash"
                             required={model.enabled}
                           />
                         </div>

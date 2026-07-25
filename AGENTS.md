@@ -36,7 +36,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 | API | `src/app/api/` |
 | 业务逻辑 | `src/lib/`（采集、告警、加密、适配器） |
 | 费用观测 | `src/lib/cost-observation.ts`, `src/app/api/costs/`, `src/app/(dashboard)/costs/` |
-| 模型资料库 | `src/lib/official-model-prices.ts`, `src/app/(dashboard)/models/` |
+| 模型资料库 | `src/lib/official-model-prices.ts`, `src/lib/model-catalog-metadata.ts`, `src/app/(dashboard)/models/` |
 | 上游适配器 | `src/lib/adapters/` |
 | 数据模型 | `prisma/schema.prisma`（provider = sqlite） |
 | 初始化脚本 | `scripts/init-sqlite.mjs` |
@@ -63,7 +63,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 7. **模型恢复语义**：轻量余额/模型列表检查不得覆盖最近一次真实模型测试失败；只有同一模型后续真实测试成功才恢复。
 8. **部署边界**：官方默认配置仅面向本机或可信内网；Docker 只绑定 `127.0.0.1`，不得把免登录面板描述为适合直接暴露公网。
 9. **费用口径**：站点总消费以建站后共享余额的相邻下降量为准，余额增加不抵消历史消费；当前只展示站点级费用，不采集或展示无法与余额严格对账的分组/模型费用。停服区间只能在恢复后按前后净余额差入账，不能还原消费时间；站点费用流水不受普通指标保留期清理。
-10. **模型资料口径**：模型资料库是内置只读目录，价格统一为 USD / 100 万 Token，可按固定参考汇率仅作页面人民币估算展示；价格只使用厂商官方资料并随版本人工核验，聚合目录可用于发现候选模型及补充能力、模态和发布日期元数据，但不得作为价格权威来源；页面与费用计算必须共用 `src/lib/official-model-prices.ts`，不得建立第二套价格数据。
+10. **模型资料口径**：模型资料库是内置只读目录，价格统一为 USD / 100 万 Token，可按固定参考汇率仅作页面人民币估算展示；价格只使用厂商官方资料并随版本人工核验，聚合目录可用于发现与 models.dev 对齐的主流厂商近 6 个月通用大语言模型候选项及补充能力、模态和发布日期元数据；不收录专门图片生成或编辑型号，但不得作为价格权威来源；页面与费用计算必须共用 `src/lib/official-model-prices.ts`，不得建立第二套价格数据。
 11. **详情测试并发语义**：站点详情的单模型手动测试按分组与模型建立独立执行通道，允许不同分组或模型并行；同一模型防止重复执行，自动采集和全站测试继续按凭证串行。
 
 ## 文档同步

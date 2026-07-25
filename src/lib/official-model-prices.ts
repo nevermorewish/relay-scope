@@ -1,4 +1,4 @@
-export const MODEL_PROVIDERS = ['OpenAI', 'Anthropic', 'Google', 'xAI', 'DeepSeek', 'Kimi', 'Zhipu GLM', 'MiniMax', 'Qwen'] as const;
+export const MODEL_PROVIDERS = ['OpenAI', 'Anthropic', 'Google', 'xAI', 'DeepSeek', 'Moonshot AI', 'Zhipu AI', 'MiniMax', 'Alibaba', 'Cohere', 'Meta', 'Microsoft', 'Mistral', 'Nvidia', 'Tencent', 'Xiaomi'] as const;
 export const MODEL_CATALOG_USD_TO_CNY_RATE = 7.2;
 
 export type ModelProvider = typeof MODEL_PROVIDERS[number];
@@ -21,16 +21,23 @@ export interface OfficialModelPrice {
 
 type CatalogRow = Omit<OfficialModelPrice, 'source'>;
 
-const OFFICIAL_URLS: Record<ModelProvider, string> = {
-  OpenAI: 'https://developers.openai.com/api/docs/pricing',
-  Anthropic: 'https://docs.anthropic.com/en/docs/about-claude/pricing',
-  Google: 'https://ai.google.dev/gemini-api/docs/pricing',
+export const MODEL_PROVIDER_OFFICIAL_URLS: Readonly<Record<ModelProvider, string>> = {
+  OpenAI: 'https://openai.com/zh-Hans/api/pricing/',
+  Anthropic: 'https://docs.anthropic.com/zh-CN/docs/about-claude/pricing',
+  Google: 'https://ai.google.dev/gemini-api/docs/pricing?hl=zh-cn',
   xAI: 'https://docs.x.ai/developers/models',
-  DeepSeek: 'https://api-docs.deepseek.com/quick_start/pricing',
-  Kimi: 'https://www.kimi.com/help/kimi-api/api-pricing',
-  'Zhipu GLM': 'https://docs.z.ai/guides/overview/pricing',
-  MiniMax: 'https://platform.minimax.io/docs/guides/pricing-paygo',
-  Qwen: 'https://www.alibabacloud.com/help/en/model-studio/model-pricing',
+  DeepSeek: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing',
+  'Moonshot AI': 'https://platform.kimi.com/docs/pricing/chat',
+  'Zhipu AI': 'https://www.bigmodel.cn/pricing',
+  MiniMax: 'https://platform.minimaxi.com/docs/guides/pricing-paygo',
+  Alibaba: 'https://help.aliyun.com/zh/model-studio/model-pricing',
+  Cohere: 'https://docs.cohere.com/docs/models',
+  Meta: 'https://www.llama.com/models/',
+  Microsoft: 'https://azure.microsoft.com/zh-cn/products/ai-foundry/models',
+  Mistral: 'https://docs.mistral.ai/getting-started/models/',
+  Nvidia: 'https://build.nvidia.com/explore/discover',
+  Tencent: 'https://cloud.tencent.com/document/product/1729',
+  Xiaomi: 'https://platform.xiaomimimo.com/docs',
 };
 
 function row(
@@ -50,7 +57,7 @@ function row(
     cacheWrite: options.cacheWrite ?? null,
     contextWindow: options.contextWindow ?? null,
     maxOutput: options.maxOutput ?? null,
-    officialUrl: options.officialUrl ?? OFFICIAL_URLS[provider],
+    officialUrl: options.officialUrl ?? MODEL_PROVIDER_OFFICIAL_URLS[provider],
     verifiedAt,
     note: options.note,
     source: `官方价格目录（${verifiedAt} 核验）`,
@@ -102,13 +109,45 @@ export const OFFICIAL_MODEL_CATALOG: ReadonlyArray<OfficialModelPrice> = [
   row('xAI', 'grok-4.3', 1.25, 2.5, { contextWindow: 2_000_000, maxOutput: 128_000, note: '超过 20 万上下文时输入 $2.5、输出 $5。' }),
   row('xAI', 'grok-4.20-0309-reasoning', 1.25, 2.5, { contextWindow: 2_000_000, maxOutput: 128_000, note: '超过 20 万上下文时输入 $2.5、输出 $5。' }),
   row('xAI', 'grok-4.20-0309-non-reasoning', 1.25, 2.5, { contextWindow: 2_000_000, maxOutput: 128_000, note: '超过 20 万上下文时输入 $2.5、输出 $5。' }),
+  row('xAI', 'grok-build-0.1', 1, 2, { cacheRead: 0.2, contextWindow: 256_000, maxOutput: 256_000, note: '超过 20 万上下文时输入 $2、缓存读取 $0.4、输出 $4。' }),
 
-  row('Kimi', 'kimi-k3', 3, 15, { cacheRead: 0.3, contextWindow: 1_000_000, maxOutput: 131_072 }),
-  row('Zhipu GLM', 'glm-5.1', 1.4, 4.4, { cacheRead: 0.26, contextWindow: 200_000, maxOutput: 131_072 }),
-  row('Zhipu GLM', 'glm-5', 1, 3.2, { cacheRead: 0.2, contextWindow: 204_800, maxOutput: 131_072 }),
+  row('Moonshot AI', 'kimi-k3', 3, 15, { cacheRead: 0.3, contextWindow: 1_000_000, maxOutput: 131_072 }),
+  row('Moonshot AI', 'kimi-k2.6', 0.95, 4, { cacheRead: 0.16, contextWindow: 262_144, maxOutput: 262_144 }),
+  row('Moonshot AI', 'kimi-k2.7-code', 0.95, 4, { cacheRead: 0.19, contextWindow: 262_144, maxOutput: 262_144 }),
+  row('Zhipu AI', 'glm-5.1', 1.4, 4.4, { cacheRead: 0.26, contextWindow: 200_000, maxOutput: 131_072 }),
+  row('Zhipu AI', 'glm-5', 1, 3.2, { cacheRead: 0.2, contextWindow: 204_800, maxOutput: 131_072 }),
+  row('Zhipu AI', 'glm-5.2', 1.4, 4.4, { cacheRead: 0.26, contextWindow: 1_000_000, maxOutput: 131_072 }),
+  row('Zhipu AI', 'glm-5-turbo', 1.2, 4, { cacheRead: 0.24, contextWindow: 200_000, maxOutput: 131_072 }),
+  row('Zhipu AI', 'glm-5v-turbo', 1.2, 4, { cacheRead: 0.24, contextWindow: 200_000, maxOutput: 131_072 }),
   row('MiniMax', 'MiniMax-M2.7', 0.3, 1.2, { cacheRead: 0.06, cacheWrite: 0.375, contextWindow: 204_800, maxOutput: 131_072 }),
   row('MiniMax', 'MiniMax-M2.7-highspeed', 0.6, 2.4, { cacheRead: 0.06, cacheWrite: 0.375, contextWindow: 204_800, maxOutput: 131_072 }),
-  row('Qwen', 'qwen3.7-max-2026-05-17', 2.5, 7.5, { contextWindow: 1_000_000, maxOutput: 65_536 }),
+  row('MiniMax', 'MiniMax-M3', 0.6, 2.4, { cacheRead: 0.12, contextWindow: 512_000, maxOutput: 128_000, note: '主表展示不超过 512K 输入 Token 的官方标准价；官方页面同时列出优惠价和长上下文档位。' }),
+  row('MiniMax', 'MiniMax-M2.5', 0.3, 1.2, { cacheRead: 0.03, cacheWrite: 0.375, contextWindow: 204_800, maxOutput: 131_072 }),
+  row('MiniMax', 'MiniMax-M2.5-highspeed', 0.6, 2.4, { cacheRead: 0.03, cacheWrite: 0.375, contextWindow: 204_800, maxOutput: 131_072 }),
+  row('Alibaba', 'qwen3.7-max-2026-05-17', 2.5, 7.5, { contextWindow: 1_000_000, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.7-max', 2.5, 7.5, { contextWindow: 1_000_000, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.7-plus', 1.6, 1.6, { cacheRead: 0.4, contextWindow: 1_000_000, maxOutput: 64_000 }),
+  row('Alibaba', 'qwen3.6-flash', 1.5, 1.5, { cacheRead: 0.25, contextWindow: 1_000_000, maxOutput: 65_536, note: '主表展示不超过 256K 输入 Token 的国际标准价；长上下文价格更高。' }),
+  row('Alibaba', 'qwen3.6-27b', 3.6, 3.6, { cacheRead: 0.6, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.6-max-preview', 1.3, 7.8, { contextWindow: 262_144, maxOutput: 65_536, note: '主表展示不超过 128K 输入 Token 的国际标准价。' }),
+  row('Alibaba', 'qwen3.6-35b-a3b', 2.25, 2.25, { cacheRead: 0.375, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.6-plus', 3, 3, { cacheRead: 0.5, contextWindow: 1_000_000, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.5-122b-a10b', 3.2, 3.2, { cacheRead: 0.4, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.5-27b', 2.4, 2.4, { cacheRead: 0.3, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.5-35b-a3b', 2, 2, { cacheRead: 0.25, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.5-plus', 2.4, 2.4, { cacheRead: 0.4, contextWindow: 1_000_000, maxOutput: 65_536 }),
+  row('Alibaba', 'qwen3.5-397b-a17b', 3.6, 3.6, { cacheRead: 0.6, contextWindow: 262_144, maxOutput: 65_536 }),
+  row('Microsoft', 'mai-code-1-flash', 1.1, 4.4, {
+    contextWindow: 256_000,
+    maxOutput: 128_000,
+    officialUrl: 'https://ai.azure.com/catalog/models/mai-code-1-flash',
+    note: 'Azure AI 模型目录提供的参考价格；实际价格可能随使用方式和部署配置变化。',
+  }),
+  row('Xiaomi', 'mimo-v2.5', 0.14, 0.28, { cacheRead: 0.0028, contextWindow: 1_048_576, maxOutput: 131_072 }),
+  row('Xiaomi', 'mimo-v2.5-pro', 0.435, 0.87, { cacheRead: 0.0036, contextWindow: 1_048_576, maxOutput: 131_072 }),
+  row('Xiaomi', 'mimo-v2.5-pro-ultraspeed', 1.305, 2.61, { cacheRead: 0.0108, contextWindow: 1_048_576, maxOutput: 131_072 }),
+  row('Mistral', 'mistral-small-2603', 0.15, 0.6, { contextWindow: 256_000, maxOutput: 64_000 }),
+  row('Mistral', 'mistral-medium-3-5', 1.5, 7.5, { contextWindow: 256_000, maxOutput: 64_000, note: '对应 26.04 版本；资料目录使用的发布 ID 为 mistral-medium-2604。' }),
   row('DeepSeek', 'deepseek-v4-flash', 0.14, 0.28, { cacheRead: 0.0028, contextWindow: 1_000_000, maxOutput: 384_000 }),
   row('DeepSeek', 'deepseek-v4-pro', 0.435, 0.87, { cacheRead: 0.003625, contextWindow: 1_000_000, maxOutput: 384_000 }),
 ];
@@ -125,6 +164,7 @@ const MODEL_ALIASES: Record<string, string> = {
   'claude-opus-48': 'claude-opus-4.8',
   'deepseek-chat': 'deepseek-v4-flash',
   'deepseek-reasoner': 'deepseek-v4-flash',
+  'mistral-medium-2604': 'mistral-medium-3-5',
 };
 
 export function getOfficialModelPrice(modelName: string): OfficialModelPrice | null {
@@ -153,7 +193,7 @@ export function normalizeModelLookupKey(modelName: string) {
   return modelName
     .trim()
     .toLowerCase()
-    .replace(/^(openai|anthropic|google|xai|x-ai|deepseek)[/:]/, '')
+    .replace(/^(openai|anthropic|google|xai|x-ai|deepseek|moonshotai|moonshot-ai|kimi|zhipuai|zhipu-ai|zhipu-glm|minimax|alibaba|qwen|cohere|meta|microsoft|mistral|nvidia|tencent|xiaomi)[/:]/, '')
     .replace(/[\s_]+/g, '-')
     .replace(/-{2,}/g, '-');
 }

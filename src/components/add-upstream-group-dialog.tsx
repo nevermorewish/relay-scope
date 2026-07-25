@@ -346,7 +346,7 @@ export function AddUpstreamGroupDialog({
                 <div key={model.clientId} className="grid gap-2 rounded-md bg-muted/30 p-2 sm:grid-cols-[minmax(160px,1fr)_110px_110px_auto_auto] sm:items-end">
                   <div className="space-y-1">
                     <Label className="text-xs">模型名称</Label>
-                    <Input list="detail-available-models" value={model.modelName} onChange={(event) => updateModelName(model.clientId, event.target.value)} placeholder="gpt-5.6-sol" required={model.enabled} />
+                    <Input list="detail-available-models" value={model.modelName} onChange={(event) => updateModelName(model.clientId, event.target.value)} placeholder="如 qwen3.6-flash" required={model.enabled} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">官方输入价</Label>

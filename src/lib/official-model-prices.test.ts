@@ -85,3 +85,28 @@ test('converts catalog display prices to CNY without changing USD values', () =>
   assert.equal(convertCatalogPrice(5, 'CNY'), 36);
   assert.equal(convertCatalogPrice(null, 'CNY'), null);
 });
+test('matches provider-prefixed catalog model names for automatic form pricing', () => {
+  assert.deepEqual(
+    { input: getOfficialModelPrice('alibaba/qwen3.6-flash')?.input, output: getOfficialModelPrice('moonshotai/kimi-k2.6')?.output },
+    { input: 1.5, output: 4 },
+  );
+  assert.equal(getOfficialModelPrice('mistral/mistral-medium-2604')?.id, 'mistral-medium-3-5');
+});
+
+test('resolves verified Xiaomi and Microsoft prices for automatic form pricing', () => {
+  assert.deepEqual(
+    {
+      input: getOfficialModelPrice('xiaomi/mimo-v2.5')?.input,
+      output: getOfficialModelPrice('MiMo V2.5 Pro')?.output,
+      cacheRead: getOfficialModelPrice('mimo_v2.5_pro_ultraspeed')?.cacheRead,
+    },
+    { input: 0.14, output: 0.87, cacheRead: 0.0108 },
+  );
+  assert.deepEqual(
+    {
+      input: getOfficialModelPrice('microsoft/mai-code-1-flash')?.input,
+      output: getOfficialModelPrice('MAI Code 1 Flash')?.output,
+    },
+    { input: 1.1, output: 4.4 },
+  );
+});
