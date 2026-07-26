@@ -23,12 +23,10 @@ function Show-RelayScopeMessage {
   ) | Out-Null
 }
 
-function Test-RelayScopeListener {
-  param([int]$ProcessId)
+function Test-RelayScopeProcess {
+  param([object]$Process)
 
-  if ((Get-ListenerProcessIds) -notcontains $ProcessId) { return $false }
-
-  $process = Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction SilentlyContinue
+  $process = $Process
   return $process -and $process.CommandLine -and
     $process.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
     $process.CommandLine -match 'next|node_modules'
@@ -43,42 +41,43 @@ function Get-ListenerProcessIds {
   }
 }
 
-function Find-RelayScopeListenerId {
+function Find-RelayScopeListener {
+  $listenerIds = @(Get-ListenerProcessIds)
+
   if (Test-Path -LiteralPath $pidPath) {
     $storedPid = 0
     if ([int]::TryParse(([System.IO.File]::ReadAllText($pidPath).Trim()), [ref]$storedPid) -and
-        (Test-RelayScopeListener -ProcessId $storedPid)) {
-      return $storedPid
+        $listenerIds -contains $storedPid) {
+      $storedProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$storedPid" -ErrorAction SilentlyContinue
+      if (Test-RelayScopeProcess -Process $storedProcess) {
+        return $storedProcess
+      }
     }
   }
 
-  foreach ($listenerId in Get-ListenerProcessIds) {
-    if (Test-RelayScopeListener -ProcessId $listenerId) {
-      return [int]$listenerId
+  foreach ($listenerId in $listenerIds) {
+    $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerId" -ErrorAction SilentlyContinue
+    if (Test-RelayScopeProcess -Process $listener) {
+      return $listener
     }
   }
-  return 0
+  return $null
 }
 
 try {
   $hasLauncherLock = $launcherMutex.WaitOne(30000)
   if (-not $hasLauncherLock) { exit 1 }
 
-  $listenerId = Find-RelayScopeListenerId
-  if (-not $listenerId) {
+  $listener = Find-RelayScopeListener
+  if (-not $listener) {
     if (Test-Path -LiteralPath $pidPath) { Remove-Item -LiteralPath $pidPath -Force }
     Show-RelayScopeMessage 'RelayScope is not running.'
     exit 0
   }
 
-  $listener = Get-CimInstance Win32_Process -Filter "ProcessId=$listenerId" -ErrorAction SilentlyContinue
-  $parent = if ($listener) {
-    Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.ParentProcessId)" -ErrorAction SilentlyContinue
-  } else {
-    $null
-  }
+  $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.ParentProcessId)" -ErrorAction SilentlyContinue
 
-  Stop-Process -Id $listenerId -Force -ErrorAction Stop
+  Stop-Process -Id $listener.ProcessId -Force -ErrorAction Stop
   if ($parent -and $parent.CommandLine -and
       $parent.CommandLine.IndexOf($projectRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 -and
       $parent.CommandLine -match 'next|node_modules') {

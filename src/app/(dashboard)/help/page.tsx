@@ -231,7 +231,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm">人民币价格 = 官方美元价格 × 分组倍率 ÷（1 元人民币获得的美元额度）</div>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>官方价格按每 100 万 Token 保存，输入和输出价格分别计算。</li>
-            <li>侧栏“模型资料库”可以按名称或厂商查询官方输入、输出、缓存价格、上下文和资料来源，并可切换美元或按固定参考汇率估算的人民币；目录随版本人工核验，不会联网自动更新。</li>
+            <li>侧栏“模型数据”可以按名称或厂商查询官方输入、输出、缓存价格、上下文和资料来源，点击列标题可切换排序；人民币优先显示厂商官方人民币价，缺失时才按固定参考汇率估算。版本化目录随 RelayScope 发布并在构建时自动校验，不会联网覆盖。</li>
             <li>“1 元人民币获得的美元额度”填写 1，表示 ¥1 获得 $1 额度；填写 10，表示 ¥1 获得 $10 额度。</li>
             <li>A6API 等动态路由平台会优先使用真实消费日志反推实际倍率和价格，公开目录价格仅作参考。</li>
             <li>价格或倍率按两位小数显示后没有发生变化时，不会重复创建价格告警。</li>
@@ -267,6 +267,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>站点总消费逐段累计共享账户余额的下降量；充值、退款或其他余额增加只更新新基线，不会抵消历史消费。</li>
             <li>首个成功余额快照只建立基线，因此从站点加入 RelayScope 后开始统计。</li>
+            <li>可筛选昨日、近 7 天、全部或自定义范围；主卡片同时固定显示今日消费、滚动近 30 天消费和不受时间范围影响的当前余额。</li>
             <li>趋势按范围自动使用 15 分钟、6 小时、天、周或月粒度；选择单个站点时主趋势自动切换为该站点。</li>
             <li>费用观测只展示能够由余额下降统一核对的站点级费用，不展示无法准确对账的分组或模型金额。</li>
             <li>人民币成本按消费发生时保存的充值比例换算；调整充值比例不会改写历史流水。</li>
@@ -319,7 +320,7 @@ function createHelpSections(): HelpSectionDefinition[] {
           <Faq question="为什么能测试模型，却仍提示需配置？">API Key 足以完成生成测试，但部分 New API 平台还需要 Access Token 和用户 ID 才能读取余额、消费日志和动态倍率。</Faq>
           <Faq question="为什么价格显示未录入？">内置价格库没有匹配模型名称，或动态平台尚未产生可用于反推价格的消费日志。请检查模型名称格式或手动填写官方价格。</Faq>
           <Faq question="自动监测为什么没有运行？">确认网站服务正在运行、自动监测开关已开启、站点和分组没有暂停。关闭网站服务后，本机后台调度也会停止。</Faq>
-          <Faq question="Windows 如何完全关闭 RelayScope？">双击桌面的“Stop RelayScope”快捷方式，或项目目录中的 <code>Stop RelayScope.cmd</code>。只关闭浏览器页面不会停止服务；停止服务后自动监测也会停止。</Faq>
+          <Faq question="Windows 如何完全关闭 RelayScope？">右键系统托盘中的 RelayScope 图标并选择“退出 RelayScope”，或运行项目目录中的 <code>Stop RelayScope.cmd</code>。只关闭监测窗口不会停止服务；停止服务后自动监测也会停止。</Faq>
           <Faq question="监测数据会一直占用硬盘吗？">会持续产生少量指标记录，但系统每天清理超过数据保留天数的明细。可在设置中调整保留天数。</Faq>
           <Faq question="可以把监测面板直接放到公网吗？">不建议。面板包含 API 凭证、余额和测试操作，官方配置只面向本机或可信内网。源码可以自行修改，但远程部署的认证和网络安全需要部署者自行负责。</Faq>
         </div>

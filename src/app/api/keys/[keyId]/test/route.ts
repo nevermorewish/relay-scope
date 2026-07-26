@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { collectOneKeyManual } from '@/lib/collector';
 import { withMonitorRun } from '@/lib/monitor-runtime';
+import { prisma } from '@/lib/db';
 
 interface Params {
   params: Promise<{ keyId: string }>;
@@ -23,7 +24,16 @@ export async function POST(request: Request, { params }: Params) {
     if (!metric) {
       return NextResponse.json({ error: '采集失败：未配置凭证' }, { status: 400 });
     }
-    return NextResponse.json(metric);
+    const keyState = await prisma.upstreamKey.findUnique({
+      where: { id: Number(keyId) },
+      select: {
+        status: true,
+        lastError: true,
+        lastLatencyMs: true,
+        lastCollectedAt: true,
+      },
+    });
+    return NextResponse.json({ ...metric, keyState });
   } catch (e) {
     return NextResponse.json({ error: '测试失败: ' + (e as Error).message }, { status: 500 });
   }

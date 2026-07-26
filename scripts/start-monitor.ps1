@@ -1,3 +1,5 @@
+param([switch]$NoBrowser)
+
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -12,7 +14,7 @@ function Test-MonitorReady {
   try {
     $request = [System.Net.HttpWebRequest]::Create($monitorUrl)
     $request.Proxy = $null
-    $request.Timeout = 2000
+    $request.Timeout = 750
     $response = $request.GetResponse()
     $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
     $content = $reader.ReadToEnd()
@@ -75,13 +77,15 @@ try {
     Start-Process -FilePath $nextCommand -ArgumentList 'start', '-H', '127.0.0.1', '-p', '3000' -WorkingDirectory $projectRoot -WindowStyle Hidden
 
     $ready = $false
-    for ($attempt = 0; $attempt -lt 45; $attempt += 1) {
-      Start-Sleep -Seconds 1
+    $startupTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($startupTimer.Elapsed.TotalSeconds -lt 45) {
       if (Test-MonitorReady) {
         $ready = $true
         break
       }
+      Start-Sleep -Milliseconds 200
     }
+    $startupTimer.Stop()
 
     if (-not $ready) {
       Add-Type -AssemblyName PresentationFramework
@@ -96,7 +100,9 @@ try {
   }
 
   Save-RelayScopePid
-  Start-Process $monitorUrl
+  if (-not $NoBrowser) {
+    Start-Process $monitorUrl
+  }
 } finally {
   if ($hasLauncherLock) { $launcherMutex.ReleaseMutex() }
   $launcherMutex.Dispose()

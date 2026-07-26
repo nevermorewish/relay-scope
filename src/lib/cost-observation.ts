@@ -519,7 +519,15 @@ async function resolveLocalPrice(params: {
     };
   }
   const official = getOfficialModelPrice(params.modelName);
-  if (!official || !params.groupRateMultiplier || params.groupRateMultiplier <= 0) return null;
+  if (
+    !official ||
+    official.input == null ||
+    official.output == null ||
+    !params.groupRateMultiplier ||
+    params.groupRateMultiplier <= 0
+  ) {
+    return null;
+  }
   return {
     inputPrice: official.input * params.groupRateMultiplier,
     outputPrice: official.output * params.groupRateMultiplier,

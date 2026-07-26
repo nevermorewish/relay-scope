@@ -90,13 +90,16 @@ try {
 
   Add-Type -AssemblyName PresentationFramework
   [System.Windows.MessageBox]::Show(
-    'Setup completed. Start and Stop RelayScope shortcuts were added to the desktop.',
+    'Setup completed. A RelayScope shortcut was added to the desktop. Use its system tray menu to open, restart, or exit.',
     'RelayScope Setup',
     'OK',
     'Information'
   ) | Out-Null
 
-  & (Join-Path $PSScriptRoot 'start-monitor.ps1')
+  Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') `
+    -ArgumentList '-NoProfile', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', "`"$(Join-Path $PSScriptRoot 'tray-monitor.ps1')`"" `
+    -WorkingDirectory $projectRoot `
+    -WindowStyle Hidden
 } catch {
   Stop-WithMessage "Setup did not complete: $($_.Exception.Message)"
 } finally {

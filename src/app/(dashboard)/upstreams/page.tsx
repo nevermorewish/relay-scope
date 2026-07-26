@@ -53,6 +53,7 @@ interface DraftGroup {
 interface MonitorStatus {
   enabled: boolean;
   running: boolean;
+  automaticHeavyRunning: boolean;
   nextRunAt: string | null;
   nextHeavyRunAt: string | null;
 }
@@ -322,7 +323,7 @@ export default function UpstreamsPage() {
               <div className="leading-tight">
                 <div className="text-xs font-medium">自动监测</div>
                 <div className="text-[11px] text-muted-foreground">
-                  {monitorStatus?.running
+                  {monitorStatus?.automaticHeavyRunning
                     ? '检测中…'
                     : monitorStatus?.enabled
                       ? formatNextRun(monitorStatus.nextHeavyRunAt)

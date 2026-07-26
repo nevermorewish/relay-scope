@@ -28,25 +28,26 @@ test('requires all New API credentials', () => {
   assert.equal(evaluateConfiguration({ type: 'NEW_API', enabled: true, keys: [complete] }).state, 'READY');
 });
 
-test('keeps configuration readiness separate from pause and detection errors', () => {
+test('keeps configuration readiness separate from pause and light collection errors', () => {
   assert.equal(evaluateConfiguration({ type: 'SUB2API', enabled: false, keys: [key()] }).state, 'READY');
   const health = evaluateConfiguration({ type: 'SUB2API', enabled: true, keys: [key({ lastError: 'timeout' })] });
   assert.equal(health.state, 'READY');
-  assert.equal(health.errorMessage, 'timeout');
+  assert.equal(health.errorMessage, null);
 });
 
-test('reports distinct models and the latest collection time', () => {
+test('reports distinct models and the latest real model test time', () => {
   const health = evaluateConfiguration({
     type: 'SUB2API',
     enabled: true,
     keys: [
-      key({ testModel: 'model-a', lastCollectedAt: '2026-07-20T10:00:00.000Z' }),
-      key({ testModel: 'model-b', lastCollectedAt: '2026-07-20T11:00:00.000Z' }),
-      key({ testModel: 'model-a', lastCollectedAt: '2026-07-20T09:00:00.000Z' }),
+      key({ monitoredModels: [{ modelName: 'model-a', enabled: true, latestTest: { ok: true, errorMessage: null, recordedAt: '2026-07-20T10:00:00.000Z' } }] }),
+      key({ monitoredModels: [{ modelName: 'model-b', enabled: true, latestTest: { ok: false, errorMessage: '模型: 请求超时', recordedAt: '2026-07-20T11:00:00.000Z' } }] }),
+      key({ monitoredModels: [{ modelName: 'model-a', enabled: true, latestTest: { ok: true, errorMessage: null, recordedAt: '2026-07-20T09:00:00.000Z' } }] }),
     ],
   });
   assert.deepEqual(health.modelNames, ['model-a', 'model-b']);
   assert.equal(health.latestCollectedAt, '2026-07-20T11:00:00.000Z');
+  assert.equal(health.errorMessage, '模型: 请求超时');
 });
 
 test('builds all-site summary independent of row pagination', () => {

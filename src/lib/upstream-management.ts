@@ -9,7 +9,15 @@ export interface ManagementKeyInput {
   lastCollectedAt?: Date | string | null;
   lastError?: string | null;
   metadataError?: string | null;
-  monitoredModels?: Array<{ modelName: string; enabled: boolean }>;
+  monitoredModels?: Array<{
+    modelName: string;
+    enabled: boolean;
+    latestTest?: {
+      ok: boolean | null;
+      errorMessage: string | null;
+      recordedAt: Date | string;
+    } | null;
+  }>;
 }
 
 export interface ManagementUpstreamInput {
@@ -43,8 +51,14 @@ export function evaluateConfiguration(upstream: ManagementUpstreamInput): Config
     return monitored.length ? monitored : [key.testModel?.trim() || ''].filter(Boolean);
   }));
   const credentialComplete = keys.length > 0 && keys.every((key) => hasRequiredCredentials(upstream.type, key));
-  const errorMessage = firstError(keys);
-  const latestCollectedAt = latestDate(keys.map((key) => key.lastCollectedAt));
+  const latestTests = keys.flatMap((key) => (
+    (key.monitoredModels || [])
+      .filter((model) => model.enabled && model.latestTest)
+      .map((model) => model.latestTest!)
+  ));
+  const errorMessage = latestTests.find((test) => test.ok === false)?.errorMessage
+    || (latestTests.some((test) => test.ok === false) ? '最近一次真实模型测试失败' : null);
+  const latestCollectedAt = latestDate(latestTests.map((test) => test.recordedAt));
 
   if (keys.length === 0 || !credentialComplete || modelNames.length === 0) {
     return { state: 'NEEDS_CONFIG', enabledGroupCount: keys.length, modelNames, credentialComplete, latestCollectedAt, errorMessage };
@@ -72,10 +86,6 @@ export function configurationLabel(state: ConfigurationState) {
 function hasRequiredCredentials(type: string, key: ManagementKeyInput) {
   if (type === 'NEW_API') return key.hasApiKey && key.hasAccessToken && Boolean(key.userId?.trim());
   return key.hasApiKey;
-}
-
-function firstError(keys: ManagementKeyInput[]) {
-  return keys.map((key) => key.lastError || key.metadataError).find(Boolean) || null;
 }
 
 function unique(values: string[]) {

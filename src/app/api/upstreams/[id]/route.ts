@@ -15,22 +15,53 @@ export async function GET(_req: Request, { params }: Params) {
   if (!upstream) {
     return NextResponse.json({ error: '上游不存在' }, { status: 404 });
   }
-  const latestModelTests = await Promise.all(upstream.keys.map((key) => (
-    prisma.metric.findFirst({
-      where: { upstreamKeyId: key.id, probeMode: 'HEAVY' },
-      orderBy: { recordedAt: 'desc' },
-      select: { modelTestLatMs: true, recordedAt: true, testModel: true },
-    })
-  )));
+  const heavyMetrics = await prisma.metric.findMany({
+    where: {
+      upstreamId: upstream.id,
+      probeMode: 'HEAVY',
+      modelTestOk: { not: null },
+    },
+    orderBy: { recordedAt: 'desc' },
+    select: {
+      upstreamKeyId: true,
+      testModel: true,
+      modelTestOk: true,
+      modelTestLatMs: true,
+      errorMessage: true,
+      recordedAt: true,
+    },
+  });
+  const latestByKey = new Map<number, typeof heavyMetrics[number]>();
+  const latestByModel = new Map<string, typeof heavyMetrics[number]>();
+  for (const metric of heavyMetrics) {
+    if (metric.upstreamKeyId == null) continue;
+    if (!latestByKey.has(metric.upstreamKeyId)) latestByKey.set(metric.upstreamKeyId, metric);
+    const modelKey = `${metric.upstreamKeyId}\0${metric.testModel}`;
+    if (!latestByModel.has(modelKey)) latestByModel.set(modelKey, metric);
+  }
   // 处理 keys 的凭证标志
-  const keys = upstream.keys.map(({ apiKeyEnc, accessTokenEnc, ...rest }, index) => ({
+  const keys = upstream.keys.map(({ apiKeyEnc, accessTokenEnc, ...rest }) => {
+    const latest = latestByKey.get(rest.id);
+    return {
     ...rest,
+    monitoredModels: rest.monitoredModels.map((model) => {
+      const modelLatest = latestByModel.get(`${rest.id}\0${model.modelName}`);
+      return {
+        ...model,
+        latestTest: modelLatest ? {
+          ok: modelLatest.modelTestOk,
+          errorMessage: modelLatest.errorMessage,
+          recordedAt: modelLatest.recordedAt,
+        } : null,
+      };
+    }),
     hasApiKey: !!apiKeyEnc,
     hasAccessToken: !!accessTokenEnc,
-    latestModelTestLatencyMs: latestModelTests[index]?.modelTestLatMs ?? null,
-    latestModelTestAt: latestModelTests[index]?.recordedAt ?? null,
-    latestModelTestModel: latestModelTests[index]?.testModel ?? null,
-  }));
+    latestModelTestLatencyMs: latest?.modelTestLatMs ?? null,
+    latestModelTestAt: latest?.recordedAt ?? null,
+    latestModelTestModel: latest?.testModel ?? null,
+  };
+  });
   return NextResponse.json({ ...upstream, keys });
 }
 

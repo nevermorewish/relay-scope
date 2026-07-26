@@ -1,4 +1,4 @@
-import { runCollectCycle } from './collector';
+import { getScheduledCollectMode, runCollectCycle } from './collector';
 import { getAutoMonitorEnabled } from './settings';
 import { AutomaticMonitorAlreadyRunningError, setNextMonitorRun, withMonitorRun } from './monitor-runtime';
 
@@ -11,7 +11,8 @@ export async function triggerScheduledCollection() {
   }
 
   try {
-    const result = await withMonitorRun('automatic', runCollectCycle);
+    const mode = await getScheduledCollectMode();
+    const result = await withMonitorRun('automatic', () => runCollectCycle(mode), mode);
     console.log(`[monitor] ${new Date().toISOString()} collected=${result.collected} mode=${result.mode}`);
   } catch (error) {
     if (!(error instanceof AutomaticMonitorAlreadyRunningError)) {

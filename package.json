@@ -26,10 +26,11 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "pnpm catalog:validate && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "tsx --test src/**/*.test.ts",
+    "catalog:validate": "tsx scripts/validate-model-catalog.ts",
     "db:generate": "prisma generate",
     "db:init": "node scripts/init-sqlite.mjs",
     "db:push": "prisma db push",

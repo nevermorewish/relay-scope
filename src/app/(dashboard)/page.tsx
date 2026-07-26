@@ -436,7 +436,7 @@ export default function DashboardPage() {
       {/* 统计卡 */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="上游/分组" value={`${summary.total}/${summary.totalKeys}`} sub={`${summary.online} 在线 · ${summary.degraded} 降级 · ${summary.offline} 离线`} icon={Server} href="/upstreams" />
-        <StatCard label="总余额" value={`¥${summary.totalBalance.toFixed(2)}`} sub="按各站点充值汇率折算" icon={Wallet} />
+        <StatCard label="总余额" value={`¥${summary.totalBalance.toFixed(2)}`} sub="按各站点充值汇率折算" icon={Wallet} href="/costs" />
         <StatCard label="整体可用率" value={`${summary.availability}%`} sub="最近 24 小时" icon={TrendingUp}
           highlight={summary.availability >= 95 ? 'good' : summary.availability >= 80 ? 'warn' : 'bad'} />
         <StatCard label="待处理告警" value={String(summary.openIncidents)} sub={`已处理 ${summary.resolvedIncidents}`} icon={Bell}
@@ -528,7 +528,15 @@ export default function DashboardPage() {
                 <td className="px-3 py-3"><div className={cn('font-semibold tabular-nums', rateColor(item.generationSuccess24h))}>{item.generationSuccess24h == null ? '—' : `${item.generationSuccess24h}%`}</div><div className="text-xs text-muted-foreground">{item.sampleCount24h} 次真实生成</div></td>
                 <td className="px-3 py-3 tabular-nums">{formatLatencySeconds(item.averageLatencyMs)}</td>
                 <td className="px-3 py-3"><ProbeStrip values={item.recentProbes} /></td>
-                <td className="px-3 py-3 tabular-nums">{item.balance == null ? '—' : `¥${item.balance.toFixed(2)}`}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  <Link
+                    draggable={false}
+                    href={`/costs?upstreamId=${item.upstreamId}`}
+                    className="inline-flex rounded-sm font-medium underline-offset-4 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {item.balance == null ? '—' : `¥${item.balance.toFixed(2)}`}
+                  </Link>
+                </td>
                 <td className="px-3 py-3 text-xs text-muted-foreground">{item.lastCollectedAt ? timeAgo(item.lastCollectedAt) : '从未'}</td>
               </tr>})}</tbody>
             </table>

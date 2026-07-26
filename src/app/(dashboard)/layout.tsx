@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { href: '/', label: '总览', icon: LayoutDashboard },
   { href: '/upstreams', label: '上游管理', icon: Server },
   { href: '/costs', label: '费用观测', icon: CircleDollarSign },
-  { href: '/models', label: '模型资料库', icon: Database },
+  { href: '/models', label: '模型数据', icon: Database },
   { href: '/incidents', label: '告警事件', icon: Bell },
 ];
 

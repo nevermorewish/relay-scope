@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runCollectCycle } from '@/lib/collector';
+import { getScheduledCollectMode, runCollectCycle } from '@/lib/collector';
 import { getCronSecret } from '@/lib/settings';
 import { AutomaticMonitorAlreadyRunningError, withMonitorRun } from '@/lib/monitor-runtime';
 
@@ -22,7 +22,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: '未授权' }, { status: 401 });
     }
 
-    const result = await withMonitorRun('automatic', runCollectCycle);
+    const mode = await getScheduledCollectMode();
+    const result = await withMonitorRun('automatic', () => runCollectCycle(mode), mode);
     const elapsed = Date.now() - start;
     return NextResponse.json({
       ok: true,

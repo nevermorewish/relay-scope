@@ -7,6 +7,7 @@ import {
   summarizeSiteCostRecords,
   type SiteCostSummaryRecord,
 } from '@/lib/cost-summary';
+import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const offset = clampInteger(searchParams.get('timezoneOffset'), -840, 840, 0);
   const now = new Date();
-  const { month, today } = localRangeBoundaries(now, offset);
+  const { last30Days, month, today } = localRangeBoundaries(now, offset);
   const from = parseDate(searchParams.get('from')) || month;
   const to = parseDate(searchParams.get('to')) || now;
   if (from >= to) {
@@ -26,19 +27,24 @@ export async function GET(request: Request) {
   const [
     selectedSiteCosts,
     todaySiteCosts,
-    monthSiteCosts,
+    last30DaysSiteCosts,
     upstreams,
     siteStates,
   ] = await Promise.all([
     loadSiteCosts({ ...upstreamWhere, occurredAt: { gte: from, lt: to } }),
     loadSiteCosts({ ...upstreamWhere, occurredAt: { gte: today, lt: now } }),
-    loadSiteCosts({ ...upstreamWhere, occurredAt: { gte: month, lt: now } }),
+    loadSiteCosts({ ...upstreamWhere, occurredAt: { gte: last30Days, lt: now } }),
     prisma.upstream.findMany({
       orderBy: [{ priority: 'desc' }, { id: 'asc' }],
       select: {
         id: true,
         name: true,
         type: true,
+        creditUsdPerCny: true,
+        keys: {
+          where: { enabled: true },
+          select: { lastBalance: true, lastCollectedAt: true },
+        },
       },
     }),
     prisma.siteCostState.findMany({
@@ -57,11 +63,18 @@ export async function GET(request: Request) {
     granularity: trendGranularity,
   });
   const todaySummary = summarizeSiteCostRecords(todaySiteCosts, offset);
-  const monthSummary = summarizeSiteCostRecords(monthSiteCosts, offset);
+  const last30DaysSummary = summarizeSiteCostRecords(last30DaysSiteCosts, offset);
   const siteCostById = new Map(selected.sites.map((site) => [site.upstreamId, site]));
   const visibleUpstreams = upstreamId
     ? upstreams.filter((upstream) => upstream.id === upstreamId)
     : upstreams;
+  const visibleBalances = visibleUpstreams.map((upstream) => convertUsdCreditToCny(
+    calculateSharedBalance(upstream.keys),
+    upstream.creditUsdPerCny,
+  ));
+  const currentBalanceCny = visibleBalances.some((balance) => balance != null)
+    ? visibleBalances.reduce<number>((sum, balance) => sum + (balance || 0), 0)
+    : null;
   const breakdown = visibleUpstreams.map((upstream) => {
     const siteCost = siteCostById.get(upstream.id) || {
       costCny: 0,
@@ -81,7 +94,8 @@ export async function GET(request: Request) {
     summary: {
       ...selected.totals,
       todayCostCny: todaySummary.totals.costCny,
-      monthCostCny: monthSummary.totals.costCny,
+      last30DaysCostCny: last30DaysSummary.totals.costCny,
+      currentBalanceCny,
     },
     trendGranularity,
     trend: selectedWithTrend.trend,

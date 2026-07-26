@@ -18,6 +18,8 @@ import { syncDynamicModelPrice } from './dynamic-pricing';
 import { withCredentialLane } from './monitor-runtime';
 import { combineCollectionAndModelStatus } from './model-health';
 import { syncSiteBalanceCosts } from './cost-observation';
+import { scheduledCollectMode } from './monitor-schedule';
+import { aggregateUpstreamStatus } from './upstream-status';
 
 export type CollectMode = 'light' | 'heavy';
 
@@ -250,15 +252,6 @@ async function getLatestEnabledModelResults(upstreamKeyId: number) {
   }));
 }
 
-/** 聚合多个 key 的状态为 upstream 汇总状态 */
-export function aggregateStatus(statuses: string[]): Upstream['status'] {
-  if (statuses.length === 0) return 'UNKNOWN';
-  if (statuses.every((s) => s === 'ONLINE')) return 'ONLINE';
-  if (statuses.every((s) => s === 'OFFLINE')) return 'OFFLINE';
-  if (statuses.some((s) => s === 'OFFLINE') && !statuses.some((s) => s === 'ONLINE' || s === 'DEGRADED')) return 'OFFLINE';
-  return 'DEGRADED';
-}
-
 /** 创建可测试的上游批量采集流程。 */
 interface CollectionJob {
   upstream: Upstream;
@@ -351,7 +344,7 @@ export async function refreshUpstreamAggregateStatus(upstreamId: number) {
     where: { upstreamId, enabled: true },
     select: { status: true },
   });
-  const status = aggregateStatus(keys.map((key) => key.status));
+  const status = aggregateUpstreamStatus(keys.map((key) => key.status));
   await prisma.upstream.update({
     where: { id: upstreamId },
     data: { status },
@@ -362,11 +355,14 @@ export async function refreshUpstreamAggregateStatus(upstreamId: number) {
 /**
  * 执行一轮采集（被 cron 调用）
  */
-export async function runCollectCycle(): Promise<{ collected: number; mode: CollectMode }> {
+export async function getScheduledCollectMode(now = new Date()): Promise<CollectMode> {
   const config = await getCollectConfig();
-  const now = new Date();
-  const minuteSlot = Math.floor(now.getTime() / 60000);
-  const mode: CollectMode = minuteSlot % config.heavyMin === 0 ? 'heavy' : 'light';
+  return scheduledCollectMode(now, config.heavyMin);
+}
+
+export async function runCollectCycle(modeOverride?: CollectMode): Promise<{ collected: number; mode: CollectMode }> {
+  const config = await getCollectConfig();
+  const mode = modeOverride ?? scheduledCollectMode(new Date(), config.heavyMin);
 
   // 查所有 enabled upstream 的 enabled keys
   const upstreams = await prisma.upstream.findMany({

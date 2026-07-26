@@ -227,7 +227,8 @@ export function localRangeBoundaries(now: Date, timezoneOffsetMinutes: number) {
     shifted.getUTCMonth(),
     1,
   ) + timezoneOffsetMinutes * 60000);
-  return { today, month };
+  const last30Days = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
+  return { today, month, last30Days };
 }
 
 function localDateKey(date: Date, timezoneOffsetMinutes: number) {

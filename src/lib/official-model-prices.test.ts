@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   MODEL_PROVIDERS,
+  MODEL_CATALOG_VERSION,
   OFFICIAL_MODEL_CATALOG,
   calculateEffectivePrice,
   convertCatalogPrice,
   filterOfficialModelCatalog,
+  getCatalogPriceTiers,
   getOfficialModelPrice,
   normalizeModelLookupKey,
 } from './official-model-prices';
@@ -46,10 +48,17 @@ test('official model catalog has valid unique records and official HTTPS sources
     assert.ok(!ids.has(model.id), `duplicate model id: ${model.id}`);
     ids.add(model.id);
     assert.ok(MODEL_PROVIDERS.includes(model.provider));
-    assert.ok(model.input >= 0);
-    assert.ok(model.output >= 0);
+    assert.ok(model.input == null || model.input >= 0);
+    assert.ok(model.output == null || model.output >= 0);
+    assert.equal(model.input == null, model.output == null);
     assert.ok(model.cacheRead == null || model.cacheRead >= 0);
     assert.ok(model.cacheWrite == null || model.cacheWrite >= 0);
+    assert.ok(model.cnyInput == null || model.cnyInput >= 0);
+    assert.ok(model.cnyOutput == null || model.cnyOutput >= 0);
+    assert.equal(model.cnyInput == null, model.cnyOutput == null);
+    assert.ok(model.cnyCacheRead == null || model.cnyCacheRead >= 0);
+    assert.ok(model.cnyCacheWrite == null || model.cnyCacheWrite >= 0);
+    assert.ok(model.input != null || model.cnyInput != null, `missing price in both currencies: ${model.id}`);
     assert.ok(model.contextWindow == null || model.contextWindow > 0);
     assert.ok(model.maxOutput == null || model.maxOutput > 0);
     assert.ok(model.officialUrl.startsWith('https://'));
@@ -83,6 +92,8 @@ test('catalog notes and optional fields do not change base price calculations', 
 test('converts catalog display prices to CNY without changing USD values', () => {
   assert.equal(convertCatalogPrice(5, 'USD'), 5);
   assert.equal(convertCatalogPrice(5, 'CNY'), 36);
+  assert.equal(convertCatalogPrice(5, 'CNY', 31), 31);
+  assert.equal(convertCatalogPrice(null, 'CNY', 13), 13);
   assert.equal(convertCatalogPrice(null, 'CNY'), null);
 });
 test('matches provider-prefixed catalog model names for automatic form pricing', () => {
@@ -108,5 +119,35 @@ test('resolves verified Xiaomi and Microsoft prices for automatic form pricing',
       output: getOfficialModelPrice('MAI Code 1 Flash')?.output,
     },
     { input: 1.1, output: 4.4 },
+  );
+});
+
+test('keeps official CNY prices separate from USD fallback conversion', () => {
+  const kimiHighspeed = getOfficialModelPrice('kimi-k2.7-code-highspeed');
+  const xiaomi = getOfficialModelPrice('mimo-v2.5-pro');
+
+  assert.deepEqual(
+    { usdInput: kimiHighspeed?.input, cnyInput: kimiHighspeed?.cnyInput, cnyOutput: kimiHighspeed?.cnyOutput },
+    { usdInput: null, cnyInput: 13, cnyOutput: 54 },
+  );
+  assert.deepEqual(
+    { cnyInput: xiaomi?.cnyInput, cnyOutput: xiaomi?.cnyOutput, cnyCacheRead: xiaomi?.cnyCacheRead },
+    { cnyInput: 3, cnyOutput: 6, cnyCacheRead: 0.025 },
+  );
+});
+
+test('loads structured price tiers from the versioned catalog', () => {
+  assert.match(MODEL_CATALOG_VERSION, /^\d{4}\.\d{2}\.\d{2}\.\d+$/);
+  const qwen = getOfficialModelPrice('qwen3.7-plus');
+  const grok = getOfficialModelPrice('grok-4.5');
+
+  assert.equal(getCatalogPriceTiers(qwen!, 'CNY').length, 4);
+  assert.deepEqual(
+    getCatalogPriceTiers(grok!, 'USD').map((tier) => [tier.input, tier.output]),
+    [[2, 6], [4, 12]],
+  );
+  assert.deepEqual(
+    getCatalogPriceTiers(grok!, 'CNY').map((tier) => [tier.input, tier.output]),
+    [[14.4, 43.2], [28.8, 86.4]],
   );
 });

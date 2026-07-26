@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Zap, RefreshCw, Check, AlertTriangle, Wallet, Timer,
   KeyRound, Activity, Trash2, Loader2, ServerCog, Pencil,
+  CircleAlert, CircleCheck, CircleMinus,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ import { beginLatestRequest } from '@/lib/request-sequence';
 import { calculateSharedBalance, convertUsdCreditToCny } from '@/lib/upstream-query';
 import { resolvedIncidentLabel } from '@/lib/incident-semantics';
 import { formatLatencySeconds, normalizeLatencyMessage } from '@/lib/latency-display';
+import { aggregateUpstreamStatus } from '@/lib/upstream-status';
 
 // ============ 类型 ============
 
@@ -60,6 +62,11 @@ interface UpstreamKey {
     officialOutputPrice: number | null;
     enabled: boolean;
     lastTestedAt: string | null;
+    latestTest: {
+      ok: boolean | null;
+      errorMessage: string | null;
+      recordedAt: string;
+    } | null;
   }>;
 }
 
@@ -185,23 +192,40 @@ export default function UpstreamDetailPage() {
         body: JSON.stringify({ monitoredModelId: modelId }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.errorMessage || `${modelName} 测试失败`);
-      }
-      const latency = data.modelTestLatMs != null ? `，延迟 ${formatLatencySeconds(data.modelTestLatMs)}` : '';
-      toast.success(`${modelName} 测试成功${latency}`, { id: tid });
+      if (!res.ok) throw new Error(data.error || data.errorMessage || `${modelName} 测试失败`);
+      const recordedAt = data.recordedAt ?? new Date().toISOString();
+      const modelTestOk = data.modelTestOk === true;
       setUpstream((current) => current ? {
         ...current,
         keys: current.keys?.map((key) => key.id === keyId ? {
           ...key,
-          lastLatencyMs: data.latencyMs ?? key.lastLatencyMs,
-          lastCollectedAt: data.recordedAt ?? key.lastCollectedAt,
+          status: data.keyState?.status ?? key.status,
+          lastError: data.keyState?.lastError ?? data.errorMessage ?? null,
+          lastLatencyMs: data.keyState?.lastLatencyMs ?? data.latencyMs ?? key.lastLatencyMs,
+          lastCollectedAt: data.keyState?.lastCollectedAt ?? recordedAt,
           latestModelTestLatencyMs: data.modelTestLatMs ?? null,
-          latestModelTestAt: data.recordedAt ?? new Date().toISOString(),
+          latestModelTestAt: recordedAt,
           latestModelTestModel: data.testModel ?? modelName,
+          monitoredModels: key.monitoredModels.map((model) => model.id === modelId ? {
+            ...model,
+            lastTestedAt: recordedAt,
+            latestTest: {
+              ok: data.modelTestOk ?? false,
+              errorMessage: data.errorMessage ?? null,
+              recordedAt,
+            },
+          } : model),
         } : key),
       } : current);
-      await fetchBase();
+      if (modelTestOk) {
+        const latency = data.modelTestLatMs != null ? `，延迟 ${formatLatencySeconds(data.modelTestLatMs)}` : '';
+        toast.success(`${modelName} 测试成功${latency}`, { id: tid });
+      } else {
+        toast.error(data.errorMessage || `${modelName} 测试失败`, { id: tid });
+      }
+      await fetchBase().catch((refreshError) => {
+        toast.error('测试结果复核失败: ' + (refreshError as Error).message);
+      });
     } catch (error) {
       toast.error((error as Error).message, { id: tid });
     } finally {
@@ -255,6 +279,9 @@ export default function UpstreamDetailPage() {
   const monitoredModelCount = keys.reduce(
     (count, key) => count + (key.monitoredModels?.filter((model) => model.enabled).length || (key.testModel ? 1 : 0)),
     0,
+  );
+  const detailStatus = aggregateUpstreamStatus(
+    keys.filter((key) => key.enabled).map((key) => key.status),
   );
 
   // ============ 渲染 ============
@@ -310,7 +337,7 @@ export default function UpstreamDetailPage() {
         description={upstream.baseUrl}
         meta={
           <>
-            <StatusBadge status={upstream.status} />
+            <StatusBadge status={upstream.enabled ? detailStatus : 'PAUSED'} />
             <Badge variant="outline">{upstream.type}</Badge>
             {!upstream.enabled && <Badge variant="secondary">监测已暂停</Badge>}
           </>
@@ -484,6 +511,9 @@ function GroupCard({ k, upstreamType, testingModelIds, onTestModel }: {
   testingModelIds: Set<number>;
   onTestModel: (keyId: number, modelId: number, modelName: string) => void;
 }) {
+  const enabledModels = (k.monitoredModels || []).filter((model) => model.enabled);
+  const failedModels = enabledModels.filter((model) => model.latestTest?.ok === false);
+
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-2">
@@ -527,8 +557,22 @@ function GroupCard({ k, upstreamType, testingModelIds, onTestModel }: {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          {(k.monitoredModels || []).filter((model) => model.enabled).map((model) => (
-            <div key={model.id} className="flex items-center gap-1 rounded-md border pl-2">
+          {enabledModels.map((model) => {
+            const failed = model.latestTest?.ok === false;
+            const healthy = model.latestTest?.ok === true;
+            return (
+            <div
+              key={model.id}
+              className={cn('flex items-center gap-1 rounded-md border pl-2', failed && 'border-destructive/50')}
+              title={failed ? model.latestTest?.errorMessage || '最近一次真实测试失败' : undefined}
+            >
+              {failed ? (
+                <CircleAlert className="size-3.5 shrink-0 text-destructive" />
+              ) : healthy ? (
+                <CircleCheck className="size-3.5 shrink-0 text-success" />
+              ) : (
+                <CircleMinus className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
               <span className="font-mono">{model.modelName}</span>
               <Button
                 size="icon-sm"
@@ -543,7 +587,8 @@ function GroupCard({ k, upstreamType, testingModelIds, onTestModel }: {
                   : <Zap />}
               </Button>
             </div>
-          ))}
+            );
+          })}
           {!k.hasApiKey ? (
             <Badge variant="outline" className="gap-1 text-warning"><AlertTriangle className="h-3 w-3" />无 Key</Badge>
           ) : null}
@@ -562,12 +607,18 @@ function GroupCard({ k, upstreamType, testingModelIds, onTestModel }: {
           </div>
         ) : null}
 
-        {k.lastError ? (
-          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="font-mono break-all">{k.lastError}</span>
+        {failedModels.map((model) => (
+          <div
+            key={`error-${model.id}`}
+            className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive"
+          >
+            <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+            <span className="break-all">
+              <span className="font-mono">{model.modelName}</span>
+              {'：'}{model.latestTest?.errorMessage || '最近一次真实测试失败'}
+            </span>
           </div>
-        ) : null}
+        ))}
       </CardContent>
     </Card>
   );

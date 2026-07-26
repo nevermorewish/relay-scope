@@ -1,33 +1,25 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $desktop = [Environment]::GetFolderPath('Desktop')
 if (-not $desktop -or -not (Test-Path -LiteralPath $desktop)) { exit 0 }
 
 $shell = New-Object -ComObject WScript.Shell
-$shortcuts = @(
-  @{
-    Name = 'Start RelayScope.lnk'
-    Target = 'Start RelayScope.cmd'
-    Description = 'Start RelayScope and open the dashboard'
-    Icon = (Join-Path $projectRoot 'assets\windows\relayscope-start-desktop-full.ico')
-  },
-  @{
-    Name = 'Stop RelayScope.lnk'
-    Target = 'Stop RelayScope.cmd'
-    Description = 'Stop RelayScope and automatic monitoring'
-    Icon = (Join-Path $projectRoot 'assets\windows\relayscope-stop-desktop-full.ico')
+$launcherScript = Join-Path $PSScriptRoot 'launch-relayscope.ps1'
+if (-not (Test-Path -LiteralPath $launcherScript)) { exit 0 }
+
+foreach ($legacyName in @('Start RelayScope.lnk', 'Stop RelayScope.lnk')) {
+  $legacyPath = Join-Path $desktop $legacyName
+  if (Test-Path -LiteralPath $legacyPath) {
+    Remove-Item -LiteralPath $legacyPath -Force
   }
-)
-
-foreach ($definition in $shortcuts) {
-  $targetPath = Join-Path $projectRoot $definition.Target
-  if (-not (Test-Path -LiteralPath $targetPath)) { continue }
-
-  $shortcut = $shell.CreateShortcut((Join-Path $desktop $definition.Name))
-  $shortcut.TargetPath = $targetPath
-  $shortcut.WorkingDirectory = $projectRoot
-  $shortcut.Description = $definition.Description
-  $shortcut.IconLocation = $definition.Icon
-  $shortcut.Save()
 }
+
+$shortcut = $shell.CreateShortcut((Join-Path $desktop 'RelayScope.lnk'))
+$shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$shortcut.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$launcherScript`""
+$shortcut.WorkingDirectory = $projectRoot
+$shortcut.WindowStyle = 7
+$shortcut.Description = '启动 RelayScope，并通过系统托盘打开或退出'
+$shortcut.IconLocation = Join-Path $projectRoot 'assets\windows\relayscope-desktop.ico'
+$shortcut.Save()

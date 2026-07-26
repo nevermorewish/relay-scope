@@ -16,3 +16,14 @@ export function calculateNextHeavyRunAt(
   }
   return null;
 }
+
+export function scheduledCollectMode(
+  date: Date,
+  heavyIntervalMinutes: number,
+): 'light' | 'heavy' {
+  const interval = Number.isFinite(heavyIntervalMinutes) && heavyIntervalMinutes > 0
+    ? Math.floor(heavyIntervalMinutes)
+    : 15;
+  const minuteSlot = Math.floor(date.getTime() / 60_000);
+  return minuteSlot % interval === 0 ? 'heavy' : 'light';
+}

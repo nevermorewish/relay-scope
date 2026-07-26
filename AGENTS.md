@@ -23,10 +23,13 @@ pnpm db:backup               # 手动完整备份 SQLite 与 .env.local
 pnpm dev
 pnpm lint
 pnpm test
+pnpm catalog:validate
 pnpm build
 ```
 
-Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌面快捷方式；后续使用 `Start RelayScope.cmd` 启动、`Stop RelayScope.cmd` 关闭。
+Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成单个 `RelayScope` 桌面快捷方式；服务已运行时快捷方式通过 Windows UI Automation 聚焦 Edge、Chrome、Brave、Vivaldi、Firefox 或 Opera 中已有的 RelayScope 标签，找不到才打开新标签，服务未运行时并行显示或聚焦本地启动页、预启动服务和初始化后台托盘，再由原标签进入监测台。托盘“打开监测台”复用同一单标签入口；连续启动由命名互斥锁合并。托盘右键可打开或退出，退出会关闭浏览器当前显示的 RelayScope 标签并同步停止服务；最小化时通过 Chromium 后台命令关闭标签但不恢复浏览器，退出过程中再次启动会立即显示启动页，等待关闭完成后自动接管并重启。`Start RelayScope.cmd` 与 `Stop RelayScope.cmd` 保留为无托盘备用入口。
+
+浏览器启动页与监测台共用 RelayScope favicon；客户端 React 挂载后主动结束浏览器仍挂起的文档加载，再揭示监测台完整界面，避免内容已显示但标签仍呈现加载状态。
 
 ## 关键路径
 
@@ -36,11 +39,11 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 | API | `src/app/api/` |
 | 业务逻辑 | `src/lib/`（采集、告警、加密、适配器） |
 | 费用观测 | `src/lib/cost-observation.ts`, `src/app/api/costs/`, `src/app/(dashboard)/costs/` |
-| 模型资料库 | `src/lib/official-model-prices.ts`, `src/lib/model-catalog-metadata.ts`, `src/app/(dashboard)/models/` |
+| 模型数据 | `data/model-catalog.json`, `src/lib/official-model-prices.ts`, `src/lib/model-catalog-schema.ts`, `src/lib/model-catalog-validation.ts`, `src/app/(dashboard)/models/` |
 | 上游适配器 | `src/lib/adapters/` |
 | 数据模型 | `prisma/schema.prisma`（provider = sqlite） |
 | 初始化脚本 | `scripts/init-sqlite.mjs` |
-| Windows 安装与启停 | `scripts/setup-windows.ps1`, `scripts/start-monitor.ps1`, `scripts/stop-monitor.ps1` |
+| Windows 安装与启停 | `scripts/setup-windows.ps1`, `scripts/launch-relayscope.ps1`, `scripts/tray-monitor.ps1`, `scripts/start-monitor.ps1`, `scripts/stop-monitor.ps1` |
 | 文档 | `README.md`, `docs/architecture.md` |
 
 ## 环境变量（事实）
@@ -60,11 +63,12 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成桌
 4. **认证**：生产关闭 `AUTH_DISABLED`；本地可用 `AUTH_DISABLED=true`。
 5. **改 schema 后**：跑 `pnpm db:generate`，并按需要 `pnpm db:push` / `pnpm db:init`。
 6. **风格**：跟随现有代码；不要无故加注释；不要擅自 commit。
-7. **模型恢复语义**：轻量余额/模型列表检查不得覆盖最近一次真实模型测试失败；只有同一模型后续真实测试成功才恢复。
+7. **模型恢复语义**：详情模型状态、最近检测和检测异常只认真实模型测试。轻量余额/模型列表检查不得覆盖最近一次真实模型测试失败；只有同一模型后续真实测试成功才恢复，手动真实测试结果需立即反映到详情页。
 8. **部署边界**：官方默认配置仅面向本机或可信内网；Docker 只绑定 `127.0.0.1`，不得把免登录面板描述为适合直接暴露公网。
 9. **费用口径**：站点总消费以建站后共享余额的相邻下降量为准，余额增加不抵消历史消费；当前只展示站点级费用，不采集或展示无法与余额严格对账的分组/模型费用。停服区间只能在恢复后按前后净余额差入账，不能还原消费时间；站点费用流水不受普通指标保留期清理。
-10. **模型资料口径**：模型资料库是内置只读目录，价格统一为 USD / 100 万 Token，可按固定参考汇率仅作页面人民币估算展示；价格只使用厂商官方资料并随版本人工核验，聚合目录可用于发现与 models.dev 对齐的主流厂商近 6 个月通用大语言模型候选项及补充能力、模态和发布日期元数据；不收录专门图片生成或编辑型号，但不得作为价格权威来源；页面与费用计算必须共用 `src/lib/official-model-prices.ts`，不得建立第二套价格数据。
+10. **模型资料口径**：`data/model-catalog.json` 是模型数据的唯一内置只读快照，必须维护 `schemaVersion`、`catalogVersion`、`updatedAt` 并通过 `pnpm catalog:validate`。厂商官方 USD 与 CNY 价格均按每 100 万 Token 保存在同一价格记录中；人民币展示优先使用官方 CNY，缺失时才按固定参考汇率估算。价格只使用厂商官方资料并随版本人工核验，可确认的分档价格必须优先保存为数字化 tiers，只有数字不完整时才使用说明。聚合目录可用于发现与 models.dev 对齐的主流厂商近 6 个月通用大语言模型候选项及补充能力、模态和发布日期元数据；不收录专门图片生成或编辑型号，也不得把聚合目录作为价格权威来源。页面、自动填价与费用计算必须通过 `src/lib/official-model-prices.ts` 共用该 JSON，不得建立第二套价格数据。当前不得在未明确设计版本校验、缓存和内置回退前加入联网自动覆盖。
 11. **详情测试并发语义**：站点详情的单模型手动测试按分组与模型建立独立执行通道，允许不同分组或模型并行；同一模型防止重复执行，自动采集和全站测试继续按凭证串行。
+12. **站点状态语义**：任一启用分组在线时站点为在线；没有在线分组时再按降级、离线、未知聚合。自动监测的“检测中”只表示耗费 Token 的重量测试，轻量轮次不显示。
 
 ## 文档同步
 

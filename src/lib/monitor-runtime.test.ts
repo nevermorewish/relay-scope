@@ -51,3 +51,17 @@ test('tracks overlapping automatic and manual monitor runs without rejecting eit
   await automatic;
   assert.equal(getMonitorRuntimeState().running, false);
 });
+
+test('only exposes the automatic testing state for heavy runs', async () => {
+  await withMonitorRun('automatic', async () => {
+    assert.equal(getMonitorRuntimeState().running, true);
+    assert.equal(getMonitorRuntimeState().automaticHeavyRunning, false);
+  }, 'light');
+
+  await withMonitorRun('automatic', async () => {
+    assert.equal(getMonitorRuntimeState().running, true);
+    assert.equal(getMonitorRuntimeState().automaticHeavyRunning, true);
+  }, 'heavy');
+
+  assert.equal(getMonitorRuntimeState().automaticHeavyRunning, false);
+});

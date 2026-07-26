@@ -56,10 +56,11 @@ test('aggregates costs into site, group, model and local calendar day', () => {
   assert.deepEqual(result.trend.map((item) => item.date), ['2026-07-02']);
 });
 
-test('derives local today and month boundaries from browser timezone offset', () => {
+test('derives local today, month, and rolling 30-day boundaries from browser timezone offset', () => {
   const result = localRangeBoundaries(new Date('2026-07-24T06:00:00Z'), -480);
   assert.equal(result.today.toISOString(), '2026-07-23T16:00:00.000Z');
   assert.equal(result.month.toISOString(), '2026-06-30T16:00:00.000Z');
+  assert.equal(result.last30Days.toISOString(), '2026-06-24T16:00:00.000Z');
 });
 
 test('aggregates authoritative site costs separately from attribution records', () => {

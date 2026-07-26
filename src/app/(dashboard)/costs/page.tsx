@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   AlertCircle,
+  CalendarDays,
   CircleDollarSign,
   Coins,
   RefreshCw,
-  Server,
+  Wallet,
 } from 'lucide-react';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -32,7 +33,8 @@ type CostsData = {
     costCny: number;
     costUsdCredit: number;
     todayCostCny: number;
-    monthCostCny: number;
+    last30DaysCostCny: number;
+    currentBalanceCny: number | null;
   };
   trendGranularity: TrendGranularity;
   trend: TrendPoint[];
@@ -45,7 +47,7 @@ type CostsData = {
   }>;
   options: Array<{ id: number; name: string; type: string }>;
 };
-type Preset = 'today' | '7d' | '30d' | 'all' | 'custom';
+type Preset = 'yesterday' | '7d' | 'all' | 'custom';
 
 export default function CostsPage() {
   const [data, setData] = useState<CostsData | null>(null);
@@ -108,8 +110,7 @@ export default function CostsPage() {
 
     <div className="flex flex-wrap gap-2">
       {([
-        ['today', '今日'], ['7d', '近 7 天'], ['30d', '近 30 天'],
-        ['all', '全部'], ['custom', '自定义'],
+        ['yesterday', '昨日'], ['7d', '近 7 天'], ['all', '全部'], ['custom', '自定义'],
       ] as Array<[Preset, string]>).map(([value, label]) => (
         <Button
           key={value}
@@ -141,12 +142,13 @@ export default function CostsPage() {
     </div>}
 
     {loading && !data
-      ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-28" />)}</div>
+      ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-28" />)}</div>
       : data && <>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <SummaryCard label="所选范围总消费" value={formatCny(data.summary.costCny)} icon={CircleDollarSign} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard label={presetSummaryLabel(preset)} value={formatCny(data.summary.costCny)} icon={CircleDollarSign} />
           <SummaryCard label="今日消费" value={formatCny(data.summary.todayCostCny)} icon={Coins} />
-          <SummaryCard label="本月消费" value={formatCny(data.summary.monthCostCny)} icon={Server} />
+          <SummaryCard label="近 30 天消费" value={formatCny(data.summary.last30DaysCostCny)} icon={CalendarDays} />
+          <SummaryCard label="当前余额" value={data.summary.currentBalanceCny == null ? '—' : formatCny(data.summary.currentBalanceCny)} icon={Wallet} />
         </div>
 
         <Card>
@@ -218,24 +220,34 @@ function CostTrendChart({ data, granularity, id }: {
   granularity: TrendGranularity;
   id: string;
 }) {
-  return <ResponsiveContainer width="100%" height="100%">
-    <AreaChart data={data}>
-      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs>
-      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-      <XAxis
-        dataKey="bucketStart"
-        minTickGap={24}
-        tick={{ fontSize: 11 }}
-        tickFormatter={(value) => formatTrendTick(String(value), granularity)}
-      />
-      <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `¥${formatCompact(value)}`} />
-      <Tooltip
-        labelFormatter={(value) => formatTrendTooltip(String(value), granularity)}
-        formatter={(value) => [formatCny(Number(value)), '消费']}
-      />
-      <Area type="monotone" dataKey="costCny" stroke="hsl(var(--primary))" fill={`url(#${id})`} />
-    </AreaChart>
-  </ResponsiveContainer>;
+  return <div className="h-full w-full [&_.recharts-surface]:outline-none [&_.recharts-wrapper]:outline-none">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data}>
+        <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs>
+        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+        <XAxis
+          dataKey="bucketStart"
+          minTickGap={24}
+          tick={{ fontSize: 11 }}
+          tickFormatter={(value) => formatTrendTick(String(value), granularity)}
+        />
+        <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => `¥${formatCompact(value)}`} />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: 'hsl(var(--popover))',
+            borderColor: 'hsl(var(--border))',
+            borderRadius: 'var(--radius)',
+            color: 'hsl(var(--popover-foreground))',
+          }}
+          itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
+          labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
+          labelFormatter={(value) => formatTrendTooltip(String(value), granularity)}
+          formatter={(value) => [formatCny(Number(value)), '消费']}
+        />
+        <Area type="monotone" dataKey="costCny" stroke="hsl(var(--primary))" fill={`url(#${id})`} />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>;
 }
 
 function Metric({ value, label, strong = false }: { value: string; label: string; strong?: boolean }) {
@@ -260,13 +272,24 @@ function EmptyState({ text }: { text: string }) {
 
 function getRange(preset: Preset, customFrom: string, customTo: string) {
   const now = new Date();
-  if (preset === 'today') return { from: dayStart(now), to: now };
+  if (preset === 'yesterday') {
+    const today = dayStart(now);
+    return { from: offsetDays(today, -1), to: today };
+  }
   if (preset === '7d') return { from: offsetDays(dayStart(now), -6), to: now };
-  if (preset === '30d') return { from: offsetDays(dayStart(now), -29), to: now };
   if (preset === 'all') return { from: new Date(0), to: now };
   const from = dateInputStart(customFrom) || monthStart(now);
   const end = dateInputStart(customTo);
   return { from, to: end ? offsetDays(end, 1) : now };
+}
+
+function presetSummaryLabel(preset: Preset) {
+  return {
+    yesterday: '昨日消费',
+    '7d': '近 7 天消费',
+    all: '全部消费',
+    custom: '自定义范围消费',
+  }[preset];
 }
 
 function dayStart(date: Date) {

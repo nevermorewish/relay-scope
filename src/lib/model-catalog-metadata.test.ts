@@ -28,7 +28,7 @@ test('model directory snapshot covers the target providers and uses valid static
     assert.ok(model.maxOutput == null || model.maxOutput > 0);
   }
 
-  assert.deepEqual([...providers].sort(), [...MODEL_PROVIDERS].sort());
+  assert.deepEqual(Array.from(providers).sort(), Array.from(MODEL_PROVIDERS).sort());
   assert.equal(Object.keys(MODEL_CATALOG_METADATA).length, MODEL_CATALOG_MODELS.length);
 });
 

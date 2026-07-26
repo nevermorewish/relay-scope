@@ -1,5 +1,6 @@
 interface MonitorRuntimeState {
   running: boolean;
+  automaticHeavyRunning: boolean;
   nextRunAt: string | null;
   source: 'automatic' | 'manual' | null;
 }
@@ -7,6 +8,7 @@ interface MonitorRuntimeState {
 interface MonitorRuntimeInternal {
   state: MonitorRuntimeState;
   activeAutomatic: number;
+  activeAutomaticHeavy: number;
   activeManual: number;
   credentialLanes: Map<string, Promise<void>>;
 }
@@ -21,8 +23,9 @@ function getMonitorRuntimeInternal(): MonitorRuntimeInternal {
   const root = globalThis as typeof globalThis & { relayMonitorRuntimeInternal?: MonitorRuntimeInternal };
   if (!root.relayMonitorRuntimeInternal) {
     root.relayMonitorRuntimeInternal = {
-      state: { running: false, nextRunAt: null, source: null },
+      state: { running: false, automaticHeavyRunning: false, nextRunAt: null, source: null },
       activeAutomatic: 0,
+      activeAutomaticHeavy: 0,
       activeManual: 0,
       credentialLanes: new Map(),
     };
@@ -37,18 +40,27 @@ export function getMonitorRuntimeState(): MonitorRuntimeState {
 export async function withMonitorRun<T>(
   source: Exclude<MonitorRuntimeState['source'], null>,
   task: () => Promise<T>,
+  mode: 'light' | 'heavy' = source === 'manual' ? 'heavy' : 'light',
 ) {
   const runtime = getMonitorRuntimeInternal();
   if (source === 'automatic' && runtime.activeAutomatic > 0) {
     throw new AutomaticMonitorAlreadyRunningError();
   }
-  if (source === 'automatic') runtime.activeAutomatic += 1;
+  if (source === 'automatic') {
+    runtime.activeAutomatic += 1;
+    if (mode === 'heavy') runtime.activeAutomaticHeavy += 1;
+  }
   else runtime.activeManual += 1;
   syncRuntimeState(runtime);
   try {
     return await task();
   } finally {
-    if (source === 'automatic') runtime.activeAutomatic = Math.max(0, runtime.activeAutomatic - 1);
+    if (source === 'automatic') {
+      runtime.activeAutomatic = Math.max(0, runtime.activeAutomatic - 1);
+      if (mode === 'heavy') {
+        runtime.activeAutomaticHeavy = Math.max(0, runtime.activeAutomaticHeavy - 1);
+      }
+    }
     else runtime.activeManual = Math.max(0, runtime.activeManual - 1);
     syncRuntimeState(runtime);
   }
@@ -77,6 +89,7 @@ export function setNextMonitorRun(date: Date | null) {
 
 function syncRuntimeState(runtime: MonitorRuntimeInternal) {
   runtime.state.running = runtime.activeAutomatic + runtime.activeManual > 0;
+  runtime.state.automaticHeavyRunning = runtime.activeAutomaticHeavy > 0;
   runtime.state.source = runtime.activeManual > 0
     ? 'manual'
     : runtime.activeAutomatic > 0
