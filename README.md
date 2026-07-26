@@ -1,24 +1,77 @@
-# RelayScope
+<div align="center">
+  <img src="assets/windows/relayscope-desktop.png" width="104" alt="RelayScope logo">
+  <h1>RelayScope</h1>
+  <p><strong>把分散的 AI API、中转站和模型服务，放进同一张监测台。</strong></p>
+  <p>统一查看余额、实际费用、价格倍率、真实生成成功率、延迟、模型状态与告警。</p>
+  <p>
+    <a href="https://github.com/dante1007108174-droid/relay-scope/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dante1007108174-droid/relay-scope/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="https://github.com/dante1007108174-droid/relay-scope/releases"><img alt="Release" src="https://img.shields.io/github/v/release/dante1007108174-droid/relay-scope?display_name=tag&sort=semver"></a>
+    <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/dante1007108174-droid/relay-scope"></a>
+    <img alt="Node.js" src="https://img.shields.io/badge/Node.js-%E2%89%A522.5-339933?logo=nodedotjs&logoColor=white">
+    <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs">
+    <img alt="SQLite" src="https://img.shields.io/badge/SQLite-local-003B57?logo=sqlite&logoColor=white">
+  </p>
+  <p>
+    <a href="#windows-快速开始">Windows 快速开始</a> ·
+    <a href="#docker">Docker</a> ·
+    <a href="#界面预览">界面预览</a> ·
+    <a href="docs/architecture.md">架构说明</a>
+  </p>
+</div>
 
-**LLM API 监测台：自托管的 AI API、中转站与模型服务监测面板。**
+![RelayScope 监测总览](docs/screenshots/desktop/dashboard.png)
 
-RelayScope 面向需要同时使用多个 AI API 的个人和小团队，集中查看余额、人民币费用、价格倍率、真实生成成功率、平均延迟、模型状态和告警。支持 New API、SUB2API 与通用 OpenAI Compatible 服务，适用于中转站监测、模型 API 监测和大模型接口可用性检查。
+RelayScope 是面向个人和小团队的自托管 LLM API 监测面板。它支持 New API、SUB2API 与通用 OpenAI Compatible 服务，用真实的小额生成请求确认“模型确实可用”，同时把站点余额、人民币价格、消费趋势和异常恢复放在一个界面里。
 
 > [!IMPORTANT]
 > RelayScope 会在本机保存 API 凭证和账户数据。官方配置只建议在个人电脑或可信内网运行，不建议把管理面板直接暴露到公网。
 
-## 功能
+## 为什么用 RelayScope
 
-- **多站点统一比较**：按站点、分组和模型筛选，比较人民币价格、倍率、余额、成功率与延迟。
-- **低成本真实测试**：轻量检查不发送生成请求；真实测试只生成极少 Token，并在同一 API 凭证上自动串行。
-- **多分组与多模型**：一个站点可配置多套 API Key，每个分组可轮换监测多个模型。
-- **动态价格观测**：支持官方价格、充值比例和分组倍率计算，也能根据 New API/A6API 消费日志还原动态路由价格。
-- **费用观测**：按建站后的余额下降汇总实际人民币消费、时间趋势和站点费用排行。
-- **模型数据**：集中查询 OpenAI、Anthropic、Google、xAI、DeepSeek、Alibaba、Moonshot AI、Zhipu AI、MiniMax、Cohere、Meta、Microsoft、Mistral、Nvidia、Tencent、Xiaomi 等厂商的主流模型资料与官方价格。
-- **状态与告警**：区分轻量连通异常和真实模型失败，跟踪恢复，支持逐条或一键确认告警以及飞书 Webhook。
-- **原地配置管理**：可在上游列表或站点详情直接编辑站点信息，并在详情页维护分组和模型。
-- **本地数据与备份**：SQLite 单文件存储，按保留天数清理历史，提供一致性快照备份。
-- **响应式界面**：支持浅色/深色主题、桌面端和移动端查看。
+| 统一观测 | 真实验证 | 费用与价格 |
+| --- | --- | --- |
+| 一个页面比较多个站点、分组和模型的余额、成功率与延迟。 | 轻量轮次不消耗模型 Token；定时真实生成验证模型是否真正可用。 | 根据余额下降累计实际人民币消费，并结合充值比例、分组倍率与官方价格。 |
+| **状态与告警** | **模型资料** | **本地掌控** |
+| 区分连通异常和真实模型失败，保留异常直到真实测试恢复，并支持飞书 Webhook。 | 内置主流厂商近期通用模型的上下文、模态、发布时间和官方 USD/CNY 价格。 | API 凭证加密写入本地 SQLite，支持一致性备份、深浅主题和移动端查看。 |
+
+## 核心能力
+
+- **多站点、多分组、多模型**：一套站点可以维护多组监测凭证，每组轮换检查多个模型。
+- **低成本分层监测**：每分钟轻量检查余额和基础连通性；真实请求最多生成 5 Token，并按凭证串行避免任务冲突。
+- **动态路由计价**：支持 New API/A6API 消费日志，尽可能还原实际路由模型、Token、缓存与倍率。
+- **可核对的费用观测**：只累计建站后共享余额的下降，不用局部日志拼凑无法对账的分组或模型费用。
+- **原地配置与手动测试**：在站点详情维护分组和模型，不离开上下文即可发起独立模型测试。
+- **顺手的 Windows 体验**：安装后使用一个桌面快捷方式和一个托盘图标；重复打开会回到已有浏览器标签。
+
+## 界面预览
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/desktop/models.png" alt="模型数据与官方价格"><br><sub>模型数据：检索近期模型、上下文、模态和官方价格</sub></td>
+    <td width="50%"><img src="docs/screenshots/desktop/upstream-detail.png" alt="上游站点详情"><br><sub>站点详情：管理分组与模型，查看实时状态并手动测试</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/desktop/upstreams.png" alt="上游管理"><br><sub>上游管理：集中比较站点状态、余额和最近检测</sub></td>
+    <td width="50%"><img src="docs/screenshots/desktop/incidents.png" alt="事件与告警"><br><sub>事件中心：跟踪异常、恢复与确认状态</sub></td>
+  </tr>
+</table>
+
+<details>
+  <summary><strong>查看更多桌面端与移动端截图</strong></summary>
+  <br>
+  <table>
+    <tr>
+      <td width="50%"><img src="docs/screenshots/desktop/settings.png" alt="桌面端系统设置"></td>
+      <td width="50%"><img src="docs/screenshots/desktop/help.png" alt="桌面端使用帮助"></td>
+    </tr>
+    <tr>
+      <td align="center"><img src="docs/screenshots/mobile/dashboard.png" width="280" alt="移动端监测总览"><br><sub>移动端监测总览</sub></td>
+      <td align="center"><img src="docs/screenshots/mobile/models.png" width="280" alt="移动端模型数据"><br><sub>移动端模型数据</sub></td>
+    </tr>
+  </table>
+</details>
+
+> 截图由隔离的合成演示数据生成，不包含真实站点、账户或 API 凭证。
 
 ## Windows 快速开始
 
@@ -78,7 +131,7 @@ pnpm build
 pnpm start
 ```
 
-开发模式使用 `pnpm dev`。生产使用应先执行 `pnpm build`，再运行 `pnpm start`。
+开发模式使用 `pnpm dev`。生产使用应先执行 `pnpm build`，再运行 `pnpm start`。生产构建成功后会自动删除只用于加速后续构建的 `.next/cache`、Prisma 下载缓存和遗留临时引擎；这些文件不参与服务运行，清理不会影响启动或页面性能。
 
 ## 使用流程
 
@@ -132,8 +185,10 @@ New API/A6API 等动态路由平台会优先读取真实消费日志，还原本
 ## 安全边界
 
 - API Key 和 Access Token 使用 `APP_ENCRYPTION_KEY` 经 AES-256-GCM 加密后写入 SQLite。
-- 浏览器常规接口不会返回密钥明文；只有用户显式点击小眼睛时才通过专用端点读取单个凭证。
+- 浏览器常规接口不会返回密钥明文；API Key、Access Token 与 CRON_SECRET 只有用户显式点击小眼睛时才通过各自的专用端点读取，通知渠道列表只返回脱敏后的 Webhook 摘要。
+- 系统设置、告警规则和通知渠道写接口使用服务端字段白名单与数值范围校验，未知字段不会直接传入数据库。
 - `.env`、`.env.local`、数据库、备份、日志和本地 Agent 目录均不得提交 Git。
+- Docker 构建上下文通过 `.dockerignore` 排除本机环境文件、数据库、备份、依赖、构建产物和 Agent 目录，避免敏感数据进入中间层。
 - 默认 Docker 端口绑定为 `127.0.0.1:3000`，免登录模式只适合本机或可信内网。
 - 如果自行改造为公网服务，需要自行启用登录保护、HTTPS、防火墙、访问控制、速率限制和凭证轮换。
 
@@ -169,7 +224,7 @@ pnpm db:backup
 
 ## 开发与验证
 
-技术栈：Next.js 14.2.35 App Router、TypeScript、Prisma、SQLite、Tailwind CSS。
+技术栈：Next.js 15.5.21 App Router、TypeScript、Prisma、SQLite、Tailwind CSS。
 
 ```bash
 pnpm test

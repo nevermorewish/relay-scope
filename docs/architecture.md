@@ -22,7 +22,9 @@ flowchart LR
   App -->|"告警与恢复通知"| Feishu["飞书 Webhook"]
 ```
 
-Next.js 14.2.35 同时承载界面、API Route 和服务端业务逻辑。运行时要求 Node.js 22.5 以上，初始化脚本使用内置 `node:sqlite`。SQLite 是单机持久化数据源；本地运行时由应用内调度器每分钟触发，也可由外部 Cron 调用鉴权端点。应用负责决定本轮执行轻量还是重量采集。
+Next.js 15.5.21 同时承载界面、API Route 和服务端业务逻辑。运行时要求 Node.js 22.5 以上，初始化脚本使用内置 `node:sqlite`。SQLite 是单机持久化数据源；本地运行时由应用内调度器每分钟触发，也可由外部 Cron 调用鉴权端点。应用负责决定本轮执行轻量还是重量采集。
+
+`pnpm build` 只保留生产运行需要的 `.next/server`、`.next/static` 和清单文件；构建成功后由 `scripts/clear-build-residue.mjs` 删除 `.next/cache`、项目内 Prisma 下载缓存和生成失败遗留的临时引擎。后续构建不能复用旧 Webpack 缓存，但服务启动和运行不依赖这些文件。
 
 自动采集、站点测试和测试全部共享进程内凭证队列。队列键由标准化站点地址和解密后的 API 凭证生成哈希：同一凭证跨请求串行，不同凭证并行。站点详情的单模型手动测试在凭证指纹后追加分组与模型标识，因此不同分组或模型可并行，同一分组的同一模型仍防止重复执行。自动轮次之间仍互斥，避免调度积压；手动任务可与自动轮次并行。
 
@@ -213,9 +215,12 @@ interface UpstreamAdapter {
 | `/api/costs` | `GET` | 按时间和站点查询费用汇总、趋势、排行与覆盖状态 |
 | `/api/incidents` | `GET` | 查询告警事件 |
 | `/api/settings` | `GET/PUT` | 读取或更新系统设置 |
+| `/api/settings/cron-secret` | `GET` | 用户显式操作时读取 CRON_SECRET |
+| `/api/alert-rules` | `GET/POST` | 查询或创建告警规则 |
+| `/api/alert-channels` | `GET/POST` | 查询脱敏渠道或创建通知渠道 |
 | `/api/cron/collect` | `GET` | 使用 CRON_SECRET 触发采集 |
 
-除登录和 CRON 入口外，Dashboard 页面与 API 由登录中间件保护。CRON 入口不使用登录 Cookie，只接受独立 Bearer 密钥。
+除登录和 CRON 入口外，Dashboard 页面与 API 由登录中间件保护。CRON 入口不使用登录 Cookie，只接受独立 Bearer 密钥。系统设置、告警规则和通知渠道写接口通过 `src/lib/admin-api-input.ts` 执行字段白名单、类型、枚举与数值范围校验，不把任意请求体直接交给 Prisma。
 
 ## 安全边界
 
@@ -224,9 +229,10 @@ interface UpstreamAdapter {
 - 管理员密码只保存 bcrypt 哈希。
 - 会话 JWT 通过 HttpOnly、SameSite Cookie 传递；生产模式下 Cookie 标记为 Secure。
 - 面向浏览器的 Key DTO 移除密文，只暴露是否已配置凭证。
-- `CRON_SECRET` 可以来自数据库设置或环境变量，数据库值优先。
+- `CRON_SECRET` 可以来自数据库设置或环境变量，数据库值优先；普通设置接口只返回是否已配置，完整值仅由显式读取端点返回。
+- 通知渠道查询只返回脱敏 Webhook 摘要和是否配置签名密钥，不向常规页面响应下发完整配置。
 - `AlertChannel.config` 和 `Setting` 可能包含敏感配置，因此数据库备份也应按密钥材料保护。
-- 官方 Docker 配置只把端口绑定到 `127.0.0.1`。项目以本机或可信内网的单用户部署为边界，不把免登录面板直接暴露公网视为受支持场景。
+- 官方 Docker 配置只把端口绑定到 `127.0.0.1`。`.dockerignore` 排除本机环境文件、数据库、备份、依赖、构建产物和 Agent 目录；Docker 构建在安装依赖前同时复制 `package.json`、锁文件、`pnpm-workspace.yaml` 和 `.npmrc`，确保安全依赖覆盖与本机 frozen install 使用同一配置。项目以本机或可信内网的单用户部署为边界，不把免登录面板直接暴露公网视为受支持场景。
 
 `APP_ENCRYPTION_KEY` 不是可随意轮换的普通配置。直接更换会导致现有上游凭证无法解密，并使既有会话失效；轮换前必须先设计数据迁移。
 

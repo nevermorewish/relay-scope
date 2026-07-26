@@ -7,6 +7,7 @@ import { prisma } from '../db';
 import { sendNotification } from './channels/feishu';
 import { canAutoResolveIncident } from '../incident-semantics';
 import { formatLatencySeconds } from '../latency-display';
+import { alertOperatorLabel, compareAlertValue } from '../alert-rule-semantics';
 
 interface EvalResult {
   rule: AlertRule;
@@ -73,16 +74,16 @@ async function evaluateRule(rule: AlertRule, key: KeyWithContext): Promise<EvalR
     case 'balance': {
       const value = key.lastBalance;
       if (value === null) return base;
-      const triggered = rule.operator === 'lt' ? value < rule.threshold : value > rule.threshold;
+      const triggered = compareAlertValue(value, rule.operator, rule.threshold);
       return { ...base, triggered, currentValue: value, incidentType: 'BALANCE_LOW',
-        message: `[${display}] 余额 $${value.toFixed(2)} ${rule.operator === 'lt' ? '低于' : '高于'} 阈值 $${rule.threshold}` };
+        message: `[${display}] 余额 $${value.toFixed(2)} ${alertOperatorLabel(rule.operator)}阈值 $${rule.threshold}` };
     }
     case 'latency': {
       const value = key.lastLatencyMs;
       if (value === null) return base;
-      const triggered = rule.operator === 'gt' ? value > rule.threshold : value < rule.threshold;
+      const triggered = compareAlertValue(value, rule.operator, rule.threshold);
       return { ...base, triggered, currentValue: value, incidentType: 'LATENCY_HIGH',
-        message: `[${display}] 延迟 ${formatLatencySeconds(value)} ${rule.operator === 'gt' ? '高于' : '低于'}阈值 ${formatLatencySeconds(rule.threshold)}` };
+        message: `[${display}] 延迟 ${formatLatencySeconds(value)} ${alertOperatorLabel(rule.operator)}阈值 ${formatLatencySeconds(rule.threshold)}` };
     }
     case 'consecutive_failures': {
       const recent = await prisma.metric.findMany({
@@ -92,7 +93,7 @@ async function evaluateRule(rule: AlertRule, key: KeyWithContext): Promise<EvalR
       });
       let failures = 0;
       for (const m of recent) { if (!m.success) failures++; else break; }
-      const triggered = failures >= rule.threshold;
+      const triggered = compareAlertValue(failures, rule.operator, rule.threshold);
       return { ...base, triggered, currentValue: failures, incidentType: 'UNAVAILABLE',
         message: `[${display}] 连续 ${failures} 次采集失败` };
     }
@@ -102,7 +103,7 @@ async function evaluateRule(rule: AlertRule, key: KeyWithContext): Promise<EvalR
       if (total === 0) return base;
       const ok = await prisma.metric.count({ where: { upstreamKeyId: key.id, recordedAt: { gt: oneHourAgo }, success: true } });
       const availability = (ok / total) * 100;
-      const triggered = availability < rule.threshold;
+      const triggered = compareAlertValue(availability, rule.operator, rule.threshold);
       return { ...base, triggered, currentValue: availability, incidentType: 'AVAILABILITY_LOW',
         message: `[${display}] 最近1小时可用率 ${availability.toFixed(1)}% 低于阈值 ${rule.threshold}%` };
     }

@@ -65,7 +65,7 @@ interface AlertChannel {
   id: number;
   name: string;
   type: string;
-  config: { webhookUrl?: string; secret?: string };
+  config: { webhookUrl?: string; hasSecret?: boolean };
   enabled: boolean;
 }
 
@@ -568,13 +568,16 @@ function SystemTab() {
   const [saved, setSaved] = useState(false);
   const [cronOrigin, setCronOrigin] = useState('');
   const [cronSecretDirty, setCronSecretDirty] = useState(false);
+  const [cronSecretConfigured, setCronSecretConfigured] = useState(false);
   const [showCronSecret, setShowCronSecret] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings')
       .then((r) => r.json())
       .then((data) => {
-        setSettings(data ?? {});
+        const { cron_secret_configured: configured, ...safeSettings } = data ?? {};
+        setCronSecretConfigured(configured === 'true');
+        setSettings(safeSettings);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -601,6 +604,7 @@ function SystemTab() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || '保存配置失败');
+      setCronSecretConfigured(Boolean(data.cronSecretConfigured));
       setCronSecretDirty(false);
       setSaved(true);
     } catch (error) {
@@ -609,6 +613,25 @@ function SystemTab() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function toggleCronSecretVisibility() {
+    if (showCronSecret) {
+      setShowCronSecret(false);
+      return;
+    }
+    if (!settings.cron_secret && cronSecretConfigured) {
+      try {
+        const res = await fetch('/api/settings/cron-secret', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || '读取定时任务密钥失败');
+        setSettings((current) => ({ ...current, cron_secret: data.secret ?? '' }));
+      } catch (error) {
+        toast.error((error as Error).message);
+        return;
+      }
+    }
+    setShowCronSecret(true);
   }
 
   if (loading) {
@@ -621,11 +644,12 @@ function SystemTab() {
   }
 
   const cronSecret = settings.cron_secret ?? '';
+  const hasCronSecret = Boolean(cronSecret) || cronSecretConfigured;
   const cronCommand = !cronOrigin
     ? '正在获取当前访问地址…'
     : cronSecret && showCronSecret
       ? buildCronCommand(cronOrigin, cronSecret)
-      : cronSecret
+      : hasCronSecret
         ? buildCronCommand(cronOrigin, '<CRON_SECRET>')
         : '请先设置 CRON_SECRET';
 
@@ -737,7 +761,7 @@ function SystemTab() {
                 className="pr-10 font-mono"
                 value={cronSecret}
                 onChange={(e) => update('cron_secret', e.target.value)}
-                placeholder="设置定时采集密钥"
+                placeholder={cronSecretConfigured ? '已设置，留空保持不变' : '设置定时采集密钥'}
               />
               <Button
                 type="button"
@@ -746,7 +770,7 @@ function SystemTab() {
                 className="absolute right-1 top-1/2 -translate-y-1/2"
                 aria-label={showCronSecret ? '隐藏定时任务密钥' : '显示定时任务密钥'}
                 title={showCronSecret ? '隐藏定时任务密钥' : '显示定时任务密钥'}
-                onClick={() => setShowCronSecret((current) => !current)}
+                onClick={() => void toggleCronSecretVisibility()}
               >
                 {showCronSecret ? <EyeOff /> : <Eye />}
               </Button>
@@ -760,7 +784,7 @@ function SystemTab() {
             <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">
               {cronCommand}
             </pre>
-            {!showCronSecret && cronSecret && (
+            {!showCronSecret && hasCronSecret && (
               <p className="text-xs text-muted-foreground">点击上方眼睛后，这里的命令才会显示完整密钥。</p>
             )}
           </div>
