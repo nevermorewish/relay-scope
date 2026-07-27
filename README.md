@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/windows/relayscope-desktop.png" width="104" alt="RelayScope logo">
+  <img src="assets/brand/relayscope-mark.svg" width="104" alt="RelayScope logo">
   <h1>RelayScope</h1>
   <p><strong>把分散的 AI API、中转站和模型服务，放进同一张监测台。</strong></p>
   <p>统一查看余额、实际费用、价格倍率、真实生成成功率、延迟、模型状态与告警。</p>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">RelayScope</title>
+  <defs>
+    <linearGradient id="surface" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4776F4"/>
+      <stop offset="0.52" stop-color="#635BEB"/>
+      <stop offset="1" stop-color="#804FD8"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="14" y1="12" x2="48" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#surface)"/>
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="none" stroke="url(#shine)" stroke-width="2"/>
+  <path d="M14 33h8l4.5-12 7 25 6.5-18 4 5h6" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="14" cy="33" r="3" fill="#FFFFFF"/>
+  <circle cx="50" cy="33" r="3" fill="#FFFFFF"/>
+</svg>

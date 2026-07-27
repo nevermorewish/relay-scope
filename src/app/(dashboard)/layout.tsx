@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Activity, LayoutDashboard, Server, Bell, Settings, BookOpen, LogOut, Menu, Sun, Moon, CircleDollarSign, Database } from 'lucide-react';
+import { LayoutDashboard, Server, Bell, Settings, BookOpen, LogOut, Menu, Sun, Moon, CircleDollarSign, Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RelayScopeLogo } from '@/components/relay-scope-logo';
 import { useTheme } from '@/components/theme-provider';
 import { cn } from '@/lib/utils';
 
@@ -77,9 +78,7 @@ function SidebarContent({
       {/* Logo */}
       <div className="mb-6 flex items-center justify-between gap-2 px-2">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Activity className="h-5 w-5" />
-          </span>
+          <RelayScopeLogo className="h-9 w-9 shrink-0" />
           <div className="min-w-0">
             <div className="truncate text-sm font-bold leading-tight">RelayScope</div>
             <div className="truncate text-[10px] text-muted-foreground">LLM API 监测台</div>
