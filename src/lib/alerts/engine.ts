@@ -19,6 +19,45 @@ interface EvalResult {
 
 type KeyWithContext = UpstreamKey & { upstream: Upstream };
 
+export async function createOperationalIncident(params: {
+  upstreamId: number;
+  upstreamKeyId: number;
+  type: IncidentType;
+  severity: string;
+  message: string;
+  metricValue?: number | null;
+  deduplicateOpen?: boolean;
+}): Promise<void> {
+  const key = await prisma.upstreamKey.findUnique({
+    where: { id: params.upstreamKeyId },
+    include: { upstream: true },
+  });
+  if (!key) return;
+
+  if (params.deduplicateOpen !== false) {
+    const existing = await prisma.incident.findFirst({
+      where: { upstreamKeyId: params.upstreamKeyId, type: params.type, resolved: false },
+      select: { id: true },
+    });
+    if (existing) return;
+  }
+
+  const incident = await prisma.incident.create({
+    data: {
+      upstreamId: params.upstreamId,
+      upstreamKeyId: params.upstreamKeyId,
+      type: params.type,
+      severity: params.severity,
+      message: params.message,
+      metricValue: params.metricValue ?? null,
+    },
+  });
+
+  void sendNotification(incident, key.upstream, key, false).catch((err) => {
+    console.error(`[告警] 发送通知失败 (incident ${incident.id}):`, err);
+  });
+}
+
 /** 对单个 key 评估所有启用的告警规则 */
 export async function evaluateAlerts(upstreamKeyId: number): Promise<void> {
   const key = await prisma.upstreamKey.findUnique({
@@ -28,8 +67,6 @@ export async function evaluateAlerts(upstreamKeyId: number): Promise<void> {
   if (!key) return;
 
   const rules = await prisma.alertRule.findMany({ where: { enabled: true } });
-  if (rules.length === 0) return;
-
   const evaluations: EvalResult[] = [];
   for (const rule of rules) {
     evaluations.push(await evaluateRule(rule, key));

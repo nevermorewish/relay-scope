@@ -16,6 +16,14 @@ test('treats price changes as acknowledgement events instead of recoverable fail
   assert.equal(resolveIncidentActionLabel('PRICE_CHANGED'), '确认');
 });
 
+test('keeps status, credential, rate-limit, and model reminders recoverable', () => {
+  for (const type of ['STATUS_CHANGED', 'CREDENTIAL_INVALID', 'RATE_LIMITED', 'MODEL_UNAVAILABLE']) {
+    assert.equal(requiresIncidentAcknowledgement(type), false);
+    assert.equal(canAutoResolveIncident(type), true);
+    assert.equal(resolvedIncidentLabel(type), '已恢复');
+  }
+});
+
 test('keeps operational incidents recoverable', () => {
   assert.equal(requiresIncidentAcknowledgement('UNAVAILABLE'), false);
   assert.equal(canAutoResolveIncident('UNAVAILABLE'), true);

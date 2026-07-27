@@ -9,7 +9,7 @@ import { getAdapter } from './adapters/registry';
 import type { AdapterContext, BalanceResult, LatencyResult } from './adapters/base';
 import { tryDecrypt } from './crypto';
 import { getCollectConfig } from './settings';
-import { evaluateAlerts } from './alerts/engine';
+import { createOperationalIncident, evaluateAlerts } from './alerts/engine';
 import type { UpstreamType } from './domain-types';
 import { recordUsagePricing } from './usage-pricing';
 import { runRetentionCleanup } from './retention';
@@ -55,6 +55,7 @@ async function collectOneKeyInLane(
   lightResultsCache?: Map<string, Promise<LightCollectionResult>>,
 ) {
   const { upstream } = key;
+  const previousStatus = key.status;
 
   // 凭证解密
   const apiKey = key.apiKeyEnc ? tryDecrypt(key.apiKeyEnc) : null;
@@ -191,6 +192,15 @@ async function collectOneKeyInLane(
     data: updateData,
   });
 
+  await recordOperationalIncidents({
+    key,
+    previousStatus,
+    newStatus,
+    errorCode: classifyError(errors),
+    errorMessage,
+    modelName: ctx.testModel,
+  });
+
   if (upstream.type === 'SUB2API' && balanceRes.usageStats !== undefined) {
     if (balanceRes.usageStats.length) {
       await recordUsagePricing({
@@ -215,10 +225,77 @@ function classifyError(errors: string[]): string | null {
   if (!message) return null;
   if (/429/.test(message)) return 'RATE_LIMITED';
   if (/401|403/.test(message)) return 'AUTH';
+  if (/模型.*(不存在|未找到|不可用)|model.*(not found|does not exist|unavailable)/i.test(message)) {
+    return 'MODEL_UNAVAILABLE';
+  }
   if (/超时|abort|timeout/i.test(message)) return 'TIMEOUT';
   if (/5\d\d/.test(message)) return 'UPSTREAM_5XX';
   if (/流式|token|body/i.test(message)) return 'STREAM';
   return 'OTHER';
+}
+
+async function recordOperationalIncidents(params: {
+  key: UpstreamKeyWithUpstream;
+  previousStatus: string;
+  newStatus: UpstreamKey['status'];
+  errorCode: string | null;
+  errorMessage: string | null;
+  modelName: string;
+}) {
+  const { key, previousStatus, newStatus, errorCode, errorMessage, modelName } = params;
+  const knownStatus = new Set(['ONLINE', 'DEGRADED', 'OFFLINE']);
+  if (knownStatus.has(previousStatus) && previousStatus !== newStatus && newStatus !== 'ONLINE') {
+    const statusLabel = (status: string) => ({ ONLINE: '在线', DEGRADED: '降级', OFFLINE: '离线' }[status] || status);
+    const cause = errorMessage || (newStatus === 'OFFLINE'
+      ? '余额查询和基础连通性探测均失败'
+      : '模型测试失败或延迟超过阈值');
+    await createOperationalIncident({
+      upstreamId: key.upstreamId,
+      upstreamKeyId: key.id,
+      type: 'STATUS_CHANGED',
+      severity: newStatus === 'OFFLINE' ? 'CRITICAL' : 'WARNING',
+      message: `[${key.upstream.name} / ${key.group}] 状态由${statusLabel(previousStatus)}变为${statusLabel(newStatus)}。原因：${cause}`,
+      deduplicateOpen: false,
+    });
+  }
+
+  if (errorCode === 'AUTH') {
+    await createOperationalIncident({
+      upstreamId: key.upstreamId,
+      upstreamKeyId: key.id,
+      type: 'CREDENTIAL_INVALID',
+      severity: 'CRITICAL',
+      message: `[${key.upstream.name} / ${key.group}] 凭证验证失败，API Key 或 Access Token 可能已失效或权限不足。${errorMessage || ''}`,
+    });
+  }
+
+  if (errorCode === 'MODEL_UNAVAILABLE') {
+    await createOperationalIncident({
+      upstreamId: key.upstreamId,
+      upstreamKeyId: key.id,
+      type: 'MODEL_UNAVAILABLE',
+      severity: 'WARNING',
+      message: `[${key.upstream.name} / ${key.group}] 模型 ${modelName || key.testModel || '未指定'} 不可用。${errorMessage || ''}`,
+    });
+  }
+
+  if (errorCode === 'RATE_LIMITED') {
+    const recent = await prisma.metric.findMany({
+      where: { upstreamKeyId: key.id },
+      orderBy: { recordedAt: 'desc' },
+      take: 3,
+      select: { errorCode: true, success: true },
+    });
+    if (recent.length === 3 && recent.every((metric) => metric.errorCode === 'RATE_LIMITED' && !metric.success)) {
+      await createOperationalIncident({
+        upstreamId: key.upstreamId,
+        upstreamKeyId: key.id,
+        type: 'RATE_LIMITED',
+        severity: 'WARNING',
+        message: `[${key.upstream.name} / ${key.group}] 连续 3 次请求被上游限流（HTTP 429），请检查额度、频率限制或分组配置。`,
+      });
+    }
+  }
 }
 
 function deriveStatus(

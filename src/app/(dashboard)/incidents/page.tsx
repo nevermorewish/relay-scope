@@ -256,6 +256,10 @@ function typeLabel(type: string): string {
     AVAILABILITY_LOW: '可用率低',
     TEST_FAILED: '测速失败',
     PRICE_CHANGED: '价格变化',
+    STATUS_CHANGED: '状态变化',
+    CREDENTIAL_INVALID: '凭证失效',
+    RATE_LIMITED: '上游限流',
+    MODEL_UNAVAILABLE: '模型不可用',
   };
   return map[type] || type;
 }
