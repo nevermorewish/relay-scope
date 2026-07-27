@@ -257,37 +257,56 @@ function buildMetrics(keys: DemoKeyRecord[], referenceDate: Date): DemoMetricRec
   const metrics: DemoMetricRecord[] = [];
 
   keys.forEach((keyRecord, keyIndex) => {
+    if (keyRecord.status === 'UNKNOWN') return;
+
+    const appendMetric = (
+      day: number,
+      sample: number,
+      samplesPerDay: number,
+      intervalHours: number,
+      probeMode: 'LIGHT' | 'HEAVY'
+    ) => {
+      const hoursAgo = (6 - day) * 24 + (samplesPerDay - 1 - sample) * intervalHours;
+      const recordedAt = new Date(referenceDate.getTime() - hoursAgo * 60 * 60 * 1000);
+      const variation = ((day * samplesPerDay + sample + keyIndex) % 5) - 2;
+      const latestDay = day === 6;
+      const recentOutage = keyRecord.status === 'OFFLINE'
+        && latestDay
+        && sample >= samplesPerDay - (probeMode === 'HEAVY' ? 2 : 1);
+      const intermittentFailure = keyRecord.status === 'DEGRADED'
+        && probeMode === 'HEAVY'
+        && latestDay
+        && sample === 8 + keyIndex % 3;
+      const failed = recentOutage || intermittentFailure;
+      const balance = keyRecord.lastBalance === null
+        ? null
+        : round(Math.max(0, keyRecord.lastBalance - (6 - day) * 0.35 + variation * 0.08));
+      const latency = failed || keyRecord.lastLatencyMs === null
+        ? null
+        : Math.max(120, keyRecord.lastLatencyMs + variation * 24 + (keyRecord.status === 'DEGRADED' ? (6 - day) * 12 : 0));
+
+      metrics.push({
+        keySlug: keyRecord.slug,
+        balance,
+        latencyMs: latency,
+        modelTestOk: failed ? false : true,
+        modelTestLatMs: latency === null ? null : latency + 80,
+        streamTps: latency === null ? null : round(Math.max(4, 42 - latency / 80 + variation)),
+        streamFirstLat: latency === null ? null : latency + 110,
+        probeMode,
+        testModel: probeMode === 'HEAVY' ? keyRecord.testModel : null,
+        success: !failed,
+        errorMessage: failed ? keyRecord.lastError : null,
+        recordedAt,
+      });
+    };
+
     for (let day = 0; day < 7; day += 1) {
       for (let sample = 0; sample < 8; sample += 1) {
-        const hoursAgo = (6 - day) * 24 + (7 - sample) * 3;
-        const recordedAt = new Date(referenceDate.getTime() - hoursAgo * 60 * 60 * 1000);
-        const variation = ((day * 8 + sample + keyIndex) % 5) - 2;
-        const unavailable = keyRecord.status === 'OFFLINE' || keyRecord.status === 'UNKNOWN';
-        const intermittentFailure =
-          keyRecord.status === 'DEGRADED' && (sample + day + keyIndex) % 9 === 0;
-        const failed = unavailable || intermittentFailure;
-        const balance = keyRecord.lastBalance === null
-          ? null
-          : round(Math.max(0, keyRecord.lastBalance - (6 - day) * 0.35 + variation * 0.08));
-        const latency = failed || keyRecord.lastLatencyMs === null
-          ? null
-          : Math.max(120, keyRecord.lastLatencyMs + variation * 24 + (keyRecord.status === 'DEGRADED' ? day * 45 : 0));
-
-        const probeMode = sample === 2 || sample === 6 ? 'HEAVY' : 'LIGHT';
-        metrics.push({
-          keySlug: keyRecord.slug,
-          balance,
-          latencyMs: latency,
-          modelTestOk: failed ? false : true,
-          modelTestLatMs: latency === null ? null : latency + 80,
-          streamTps: latency === null ? null : round(Math.max(4, 42 - latency / 80 + variation)),
-          streamFirstLat: latency === null ? null : latency + 110,
-          probeMode,
-          testModel: probeMode === 'HEAVY' ? keyRecord.testModel : null,
-          success: !failed,
-          errorMessage: failed ? keyRecord.lastError : null,
-          recordedAt,
-        });
+        appendMetric(day, sample, 8, 3, 'LIGHT');
+      }
+      for (let sample = 0; sample < 12; sample += 1) {
+        appendMetric(day, sample, 12, 2, 'HEAVY');
       }
     }
   });
