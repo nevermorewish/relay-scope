@@ -2,11 +2,11 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RelayScopeLogo } from '@/components/relay-scope-logo';
 
 function LoginForm() {
   const router = useRouter();
@@ -39,7 +39,9 @@ function LoginForm() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <RelayScopeLogo className="mb-3 inline-block size-14" />
+          <div className="mb-3 inline-flex size-14 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Activity className="h-7 w-7" />
+          </div>
           <h1 className="text-xl font-bold">RelayScope</h1>
           <p className="mt-1 text-sm text-muted-foreground">LLM API 监测台</p>
         </div>
