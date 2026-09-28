@@ -149,6 +149,8 @@ sequenceDiagram
 
 ### 手动刷新与测试
 
+上游编辑窗口直接提供站点地址与各分组 API Key 的修改入口。`PUT /api/upstreams/:id` 接受可选 `apiKeys: [{ keyId, apiKey }]`，校验分组 ID 和密钥类型，只更新当前上游所属分组，并在同一事务内保存站点信息和加密后的密钥；任一更新失败则全部回滚。未提供或留空的 Key 保持原值，常规响应不返回明文或密文凭据。编辑窗口有未保存修改时，需先保存后再管理分组，避免切换表单丢失修改。
+
 - `POST /api/upstreams/:id/refresh`：对目标上游的全部启用 Key 执行 light 采集。
 - `POST /api/keys/:keyId/test`：对单个 Key 执行 heavy 采集。
 - `POST /api/keys/:keyId/metadata`：重新同步支持的远端 Token/分组元数据。
@@ -234,7 +236,8 @@ interface UpstreamAdapter {
 - `CRON_SECRET` 可以来自数据库设置或环境变量，数据库值优先；普通设置接口只返回是否已配置，完整值仅由显式读取端点返回。
 - 通知渠道查询只返回脱敏 Webhook 摘要和是否配置签名密钥，不向常规页面响应下发完整配置。
 - `AlertChannel.config` 和 `Setting` 可能包含敏感配置，因此数据库备份也应按密钥材料保护。
-- 官方 Docker 配置只把端口绑定到 `127.0.0.1`。`.dockerignore` 排除本机环境文件、数据库、备份、依赖、构建产物和 Agent 目录；Docker 构建在安装依赖前同时复制 `package.json`、锁文件、`pnpm-workspace.yaml` 和 `.npmrc`，确保安全依赖覆盖与本机 frozen install 使用同一配置。项目以本机或可信内网的单用户部署为边界，不把免登录面板直接暴露公网视为受支持场景。
+- 官方 Docker 配置只把端口绑定到 `127.0.0.1`。`.dockerignore` 排除本机环境文件、可能含部署凭据的 `docker-compose.yml`、数据库、备份、依赖、构建产物和 Agent 目录；Docker 构建在安装依赖前同时复制 `package.json`、锁文件、`pnpm-workspace.yaml` 和 `.npmrc`，确保安全依赖覆盖与本机 frozen install 使用同一配置。项目以本机或可信内网的单用户部署为边界，不把免登录面板直接暴露公网视为受支持场景。
+- `docker-compose.yml` 直接拉取 `crpi-dzjyl2rfnlfugj1m.cn-shanghai.personal.cr.aliyuncs.com/frogclaw/relay-scope:latest`，全部运行时环境变量内联，不依赖 `.env`。Linux 宝塔通过 HTTPS 反向代理至 `127.0.0.1:5000`（容器端口 5000）；默认开启登录。Compose 启动命令校验密钥及密码占位值，执行 SQLite 初始化，仅当 `admin` 不存在时运行基础 seed，避免重启覆盖已有密码、规则和设置。`monitor_data` 命名卷持久化 `/data`，HTTP 健康检查访问 `/api/auth/health`。镜像需要事先发布；Compose 不会编译或上传当前源码。
 
 `APP_ENCRYPTION_KEY` 不是可随意轮换的普通配置。直接更换会导致现有上游凭证无法解密，并使既有会话失效；轮换前必须先设计数据迁移。
 

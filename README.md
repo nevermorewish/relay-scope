@@ -90,22 +90,34 @@ RelayScope 是面向个人和小团队的自托管 LLM API 监测面板。它支
 
 ## Docker
 
-要求：Docker Desktop 或 Docker Engine with Compose。
+默认使用阿里云镜像 `crpi-dzjyl2rfnlfugj1m.cn-shanghai.personal.cr.aliyuncs.com/frogclaw/relay-scope:latest`，适用于 Linux 宝塔 Docker 编排，也可使用 Docker Desktop 或 Docker Engine with Compose。部署只需 `docker-compose.yml`，不需要上传源码、本地构建或另建 `.env`。
+
+在宝塔中创建 Docker 编排并粘贴 `docker-compose.yml`，或将文件放到服务器的 `/www/wwwroot/relay-scope/`。启动前直接修改文件中的三个环境变量：
+
+- `APP_ENCRYPTION_KEY`：至少 32 字符的随机密钥；迁移已有数据时沿用原值。
+- `CRON_SECRET`：至少 32 字符的独立随机密钥。
+- `ADMIN_PASSWORD`：至少 12 字符的管理员密码，首次初始化使用，用户名为 `admin`。
+
+可在 Linux 终端用 `openssl rand -hex 32` 生成随机值，每项分别生成一次。若值中包含 `$`，在 Compose 中写为 `$$`；真实配置只保留在服务器。默认占位值会阻止启动。
 
 ```bash
-cp .env.docker.example .env
-# 将 .env 中两个占位值替换为彼此不同的随机字符串
-docker compose up -d --build
+cd /www/wwwroot/relay-scope
+docker compose pull
+docker compose up -d
+docker compose ps
 ```
 
-Windows PowerShell 可使用：
+如果镜像仓库设为私有，先登录再拉取：
 
-```powershell
-Copy-Item .env.docker.example .env
-docker compose up -d --build
+```bash
+docker login crpi-dzjyl2rfnlfugj1m.cn-shanghai.personal.cr.aliyuncs.com
 ```
 
-打开 [http://127.0.0.1:3000](http://127.0.0.1:3000)。SQLite 数据保存在 Docker volume `monitor_data`，应用默认只监听本机地址。
+在宝塔“网站”中配置反向代理，目标地址填写 `http://127.0.0.1:5000`，为访问域名启用 HTTPS，再通过 HTTPS 域名登录。宿主机端口仅绑定本机；默认保持 `AUTH_DISABLED` 和 `NEXT_PUBLIC_AUTH_DISABLED` 为 `false`。生产登录 Cookie 需要 HTTPS；建议配合宝塔访问限制，仅允许自己或可信网络使用，不要将免登录面板直接暴露公网。
+
+容器自动初始化 SQLite；仅当 `admin` 不存在时执行基础 seed 创建管理员、告警规则和设置。已有管理员时重启不会重置密码或设置，后续密码通过页面修改。数据库保存在 Docker volume `monitor_data` 的 `/data/monitor.db`；备份时同时保存数据卷和服务器上的 Compose 配置，恢复时保持原 Compose 项目名以复用原数据卷。
+
+更新镜像时执行 `docker compose pull && docker compose up -d`。这个操作只拉取仓库中已发布的镜像，本地源码修改需要先构建并发布到该镜像地址才会生效。
 
 停止服务：
 
@@ -141,6 +153,8 @@ pnpm start
 3. 执行单模型测试，确认模型名称、流式响应和凭证兼容。
 4. 根据需要补充 Access Token 与用户 ID，以读取部分 New API 平台的余额、日志和动态倍率。
 5. 开启自动监测。网站服务停止后，本机调度也会随之停止。
+
+在“上游管理”的“编辑上游”或详情页的“编辑站点”中，可以直接修改地址和各分组的 API Key，点击“保存”后一起生效。API Key 留空保持原值，已保存的密钥不会自动回显；分组、模型和 Access Token 仍可通过“分组和模型”编辑。
 
 页面内置“使用帮助”，包含配置关系、测试成本、价格公式、状态口径、告警、备份和常见问题。
 
@@ -189,8 +203,8 @@ New API/A6API 等动态路由平台会优先读取真实消费日志，还原本
 - 浏览器常规接口不会返回密钥明文；API Key、Access Token 与 CRON_SECRET 只有用户显式点击小眼睛时才通过各自的专用端点读取，通知渠道列表只返回脱敏后的 Webhook 摘要。
 - 系统设置、告警规则和通知渠道写接口使用服务端字段白名单与数值范围校验，未知字段不会直接传入数据库。
 - `.env`、`.env.local`、数据库、备份、日志和本地 Agent 目录均不得提交 Git。
-- Docker 构建上下文通过 `.dockerignore` 排除本机环境文件、数据库、备份、依赖、构建产物和 Agent 目录，避免敏感数据进入中间层。
-- 默认 Docker 端口绑定为 `127.0.0.1:3000`，免登录模式只适合本机或可信内网。
+- Docker 构建上下文通过 `.dockerignore` 排除本机环境文件、可能含部署凭据的 `docker-compose.yml`、数据库、备份、依赖、构建产物和 Agent 目录，避免敏感数据进入中间层。
+- 默认 Docker 端口绑定为 `127.0.0.1:5000`，免登录模式只适合本机或可信内网。
 - 如果自行改造为公网服务，需要自行启用登录保护、HTTPS、防火墙、访问控制、速率限制和凭证轮换。
 
 公开 GitHub 源码不会包含部署者自己的 API 数据；风险来自错误上传运行数据，或把正在运行的管理面板直接暴露给他人。

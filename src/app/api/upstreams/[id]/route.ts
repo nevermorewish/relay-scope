@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { encrypt } from '@/lib/crypto';
+import { parseUpstreamApiKeyUpdates, UpstreamApiKeyInputError } from '@/lib/upstream-api-key-input';
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -71,10 +73,18 @@ export async function PUT(request: Request, { params }: Params) {
   try {
     const body = await request.json();
     const { name, baseUrl, type, enabled, priority, creditUsdPerCny } = body;
+    const apiKeys = parseUpstreamApiKeyUpdates(body.apiKeys);
 
     const data: Record<string, unknown> = {};
     if (name !== undefined) data.name = name;
-    if (baseUrl !== undefined) data.baseUrl = String(baseUrl).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    if (baseUrl !== undefined) {
+      if (typeof baseUrl !== 'string') {
+        return NextResponse.json({ error: '地址必须为字符串' }, { status: 400 });
+      }
+      const normalizedUrl = baseUrl.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+      if (!normalizedUrl) return NextResponse.json({ error: '地址不能为空' }, { status: 400 });
+      data.baseUrl = normalizedUrl;
+    }
     if (type !== undefined) data.type = type;
     if (enabled !== undefined) data.enabled = enabled;
     if (priority !== undefined) data.priority = priority;
@@ -86,10 +96,22 @@ export async function PUT(request: Request, { params }: Params) {
       data.creditUsdPerCny = rate;
     }
 
-    const upstream = await prisma.upstream.update({ where: { id: Number(id) }, data });
+    const upstream = await prisma.$transaction(async (tx) => {
+      for (const { keyId, apiKey } of apiKeys) {
+        const updated = await tx.upstreamKey.updateMany({
+          where: { id: keyId, upstreamId: Number(id) },
+          data: { apiKeyEnc: encrypt(apiKey) },
+        });
+        if (updated.count !== 1) throw new UpstreamApiKeyInputError('分组不存在或不属于当前上游');
+      }
+      return tx.upstream.update({ where: { id: Number(id) }, data });
+    });
     return NextResponse.json(upstream);
   } catch (e) {
-    return NextResponse.json({ error: '更新失败: ' + (e as Error).message }, { status: 500 });
+    if (e instanceof UpstreamApiKeyInputError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    return NextResponse.json({ error: '更新失败，请检查上游配置后重试' }, { status: 500 });
   }
 }
 

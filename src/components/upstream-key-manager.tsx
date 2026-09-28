@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { StatusDot } from '@/components/StatusBadge';
 import { useConfirm } from '@/components/confirm-dialog';
 import type { UpstreamKeyRow } from '@/components/upstreams-columns';
@@ -22,10 +24,16 @@ export function UpstreamKeyManager({
   upstreamId,
   type,
   onEditKey,
+  apiKeys,
+  onApiKeyChange,
+  managementDisabled = false,
 }: {
   upstreamId: number;
   type: string;
   onEditKey: (key: UpstreamKeyRow | null) => void;
+  apiKeys?: Record<number, string>;
+  onApiKeyChange?: (keyId: number, apiKey: string) => void;
+  managementDisabled?: boolean;
 }) {
   const { confirm, dialog } = useConfirm();
   const [keys, setKeys] = useState<UpstreamKeyRow[]>([]);
@@ -93,13 +101,16 @@ export function UpstreamKeyManager({
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-1.5 text-sm font-semibold">
           <KeyRound className="h-4 w-4" />
-          分组
+          {onApiKeyChange ? '分组与 API Key' : '分组'}
         </h3>
-        <Button size="sm" variant="outline" onClick={() => onEditKey(null)}>
+        <Button type="button" size="sm" variant="outline" disabled={managementDisabled} onClick={() => onEditKey(null)}>
           <Plus data-icon="inline-start" />
           添加分组
         </Button>
       </div>
+      {managementDisabled && (
+        <p className="text-xs text-muted-foreground">请先保存当前修改，再管理分组和模型。</p>
+      )}
       {keys.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted-foreground">暂无分组</p>
       ) : (
@@ -109,9 +120,9 @@ export function UpstreamKeyManager({
               key={key.id}
               className="flex flex-col items-stretch gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
                 <StatusDot status={key.status} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium" title={getKeyDisplayName(key)}>
                     {key.group}
                   </div>
@@ -130,16 +141,32 @@ export function UpstreamKeyManager({
                     {key.hasApiKey ? 'Key' : '无Key'}
                     {type === 'NEW_API' && (key.hasAccessToken ? ' + 令牌' : ' + 无令牌')}
                   </div>
+                  {onApiKeyChange && (
+                    <div className="mt-3 space-y-1.5">
+                      <Label htmlFor={`edit-api-key-${key.id}`}>API Key · {key.group}</Label>
+                      <Input
+                        id={`edit-api-key-${key.id}`}
+                        type="password"
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        value={apiKeys?.[key.id] || ''}
+                        onChange={(event) => onApiKeyChange(key.id, event.target.value)}
+                        placeholder={key.hasApiKey ? '已配置，输入新 API Key 替换' : '输入 API Key'}
+                      />
+                      <p className="text-xs text-muted-foreground">留空保持不变，点击下方“保存”与地址一起生效。</p>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex w-full flex-wrap justify-end gap-1 sm:w-auto sm:shrink-0">
                 {type === 'NEW_API' && (
                   <Button
+                    type="button"
                     size="sm"
                     variant="ghost"
                     aria-label="重新获取远端信息"
                     title="重新获取远端信息"
-                    disabled={refreshingKeyId === key.id}
+                    disabled={managementDisabled || refreshingKeyId === key.id}
                     onClick={() => handleRefreshKey(key)}
                   >
                     <RefreshCw
@@ -149,11 +176,13 @@ export function UpstreamKeyManager({
                     {refreshingKeyId === key.id ? '刷新中…' : '刷新'}
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" onClick={() => onEditKey(key)}>
+                <Button type="button" size="sm" variant="ghost" disabled={managementDisabled} onClick={() => onEditKey(key)}>
                   <Pencil data-icon="inline-start" />
-                  编辑
+                  {onApiKeyChange ? '分组和模型' : '编辑'}
                 </Button>
                 <Button
+                  type="button"
+                  disabled={managementDisabled}
                   size="icon-sm"
                   variant="ghost"
                   className="text-destructive"

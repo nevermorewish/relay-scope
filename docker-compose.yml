@@ -1,19 +1,56 @@
 services:
   app:
-    build: .
+    image: crpi-dzjyl2rfnlfugj1m.cn-shanghai.personal.cr.aliyuncs.com/frogclaw/relay-scope:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:5000:5000"
     environment:
       DATABASE_URL: file:/data/monitor.db
-      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
-      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in .env}
-      AUTH_DISABLED: "true"
-      NEXT_PUBLIC_AUTH_DISABLED: "true"
+      # 部署前替换这三个占位值；真实值只保存在服务器，不要提交到 Git。
+      # 已有数据库迁移时必须沿用原 APP_ENCRYPTION_KEY，不可直接更换。
+      APP_ENCRYPTION_KEY: "replace-with-your-random-encryption-key"
+      CRON_SECRET: "replace-with-your-random-cron-secret"
+      ADMIN_PASSWORD: "replace-with-your-admin-password"
+      AUTH_DISABLED: "false"
+      NEXT_PUBLIC_AUTH_DISABLED: "false"
+      NEXT_PUBLIC_APP_NAME: "RelayScope"
+      NODE_ENV: "production"
+      TZ: "Asia/Shanghai"
       SQLITE_PATH: /data/monitor.db
     volumes:
       - monitor_data:/data
-    command: ["sh", "-c", "pnpm db:init && pnpm start"]
+    command:
+      - sh
+      - -ec
+      - |
+        node <<'NODE'
+        const { execFileSync } = require('node:child_process');
+        const { PrismaClient } = require('@prisma/client');
+        for (const [name, minimum] of [['APP_ENCRYPTION_KEY', 32], ['CRON_SECRET', 32], ['ADMIN_PASSWORD', 12]]) {
+          const value = process.env[name] || '';
+          if (value.startsWith('replace-with-') || value.trim().length < minimum) {
+            throw new Error(name + ' must be replaced in docker-compose.yml (minimum ' + minimum + ' characters)');
+          }
+        }
+        execFileSync('pnpm', ['db:init'], { stdio: 'inherit' });
+        const prisma = new PrismaClient();
+        async function initialize() {
+          try {
+            const admin = await prisma.user.findUnique({ where: { username: 'admin' } });
+            if (!admin) execFileSync('pnpm', ['db:seed'], { stdio: 'inherit' });
+          } finally {
+            await prisma.$$disconnect();
+          }
+        }
+        initialize().catch((error) => { console.error(error.message); process.exitCode = 1; });
+        NODE
+        exec pnpm start --hostname 0.0.0.0 --port 5000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/api/auth/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
 
 volumes:
   monitor_data:

@@ -10,6 +10,7 @@
 - 运行时：Node.js >= 22.5（初始化脚本使用 `node:sqlite`）
 - 包管理：pnpm 11.9.0
 - 默认端口：3000
+- Docker/宝塔：直接拉取 `crpi-dzjyl2rfnlfugj1m.cn-shanghai.personal.cr.aliyuncs.com/frogclaw/relay-scope:latest`，宿主机绑定 `127.0.0.1:5000`，容器端口 5000；环境变量全部写在 `docker-compose.yml`，默认开启认证，经宝塔 HTTPS 反向代理访问。启动前替换密钥与密码占位值；仅首次缺少 admin 时自动 seed，重启不覆盖已有设置。SQLite 使用 `monitor_data` 命名卷，迁移时保留数据卷与原加密密钥。
 
 ## 本地常用命令
 
@@ -31,6 +32,8 @@ pnpm clean:build-residue     # 手动删除可重建的 Next/Prisma 构建残留
 Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成单个 `RelayScope` 桌面快捷方式；服务已运行时快捷方式通过 Windows UI Automation 聚焦 Edge、Chrome、Brave、Vivaldi、Firefox 或 Opera 中已有的 RelayScope 标签，找不到才打开新标签，服务未运行时并行显示或聚焦本地启动页、预启动服务和初始化后台托盘，再由原标签进入监测台。托盘“打开监测台”复用同一单标签入口；连续启动由命名互斥锁合并。托盘右键可打开或退出，退出会关闭浏览器当前显示的 RelayScope 标签并同步停止服务；最小化时通过 Chromium 后台命令关闭标签但不恢复浏览器，退出过程中再次启动会立即显示启动页，等待关闭完成后自动接管并重启。`Start RelayScope.cmd` 与 `Stop RelayScope.cmd` 保留为无托盘备用入口。
 
 浏览器启动页与监测台共用 RelayScope favicon；客户端 React 挂载后主动结束浏览器仍挂起的文档加载，再揭示监测台完整界面，避免内容已显示但标签仍呈现加载状态。
+
+“编辑上游”与详情页“编辑站点”可直接修改地址及各分组 API Key，并在同一事务中保存；Key 留空保持原值，不自动读取已有明文密钥。`PUT /api/upstreams/:id` 的可选 `apiKeys` 数组必须校验分组归属，密钥加密存储，失败时全部回滚。
 
 ## 关键路径
 
@@ -74,7 +77,7 @@ Windows 新用户可双击 `Setup RelayScope.cmd` 完成首次安装并生成单
 12. **站点状态语义**：任一启用分组在线时站点为在线；没有在线分组时再按降级、离线、未知聚合。自动监测的“检测中”只表示耗费 Token 的重量测试，轻量轮次不显示。
 13. **告警事件语义**：倍率/价格变化使用 `PRICE_CHANGED`，需要用户确认；状态变更、凭证失效、连续 3 次限流和模型不可用属于可自动恢复的运行提醒，按事件类型去重，不应每轮采集重复创建。
 13. **管理 API 输入**：系统设置、告警规则和通知渠道写接口必须使用服务端字段白名单与范围校验，不得把任意请求体直接传给 Prisma。
-14. **Docker 构建上下文**：`.dockerignore` 必须持续排除本机环境文件、数据库、备份、依赖、构建产物和本地 Agent 目录；Docker 安装依赖前必须复制 `pnpm-workspace.yaml` 与 `.npmrc`，确保安全覆盖和 frozen lockfile 一致。
+14. **Docker 构建上下文**：`.dockerignore` 必须持续排除本机环境文件、可能含部署凭据的 `docker-compose.yml`、数据库、备份、依赖、构建产物和本地 Agent 目录；Docker 安装依赖前必须复制 `pnpm-workspace.yaml` 与 `.npmrc`，确保安全覆盖和 frozen lockfile 一致。
 15. **构建缓存**：生产构建成功后必须运行 `scripts/clear-build-residue.mjs`，只删除 `.next/cache`、项目内 Prisma 下载缓存和临时引擎，不得删除 `.next/server`、`.next/static`、数据库、环境文件或备份。
 
 ## 文档同步
