@@ -8,9 +8,9 @@ services:
       DATABASE_URL: file:/data/monitor.db
       # 部署前替换这三个占位值；真实值只保存在服务器，不要提交到 Git。
       # 已有数据库迁移时必须沿用原 APP_ENCRYPTION_KEY，不可直接更换。
-      APP_ENCRYPTION_KEY: "replace-with-your-random-encryption-key"
-      CRON_SECRET: "replace-with-your-random-cron-secret"
-      ADMIN_PASSWORD: "replace-with-your-admin-password"
+      APP_ENCRYPTION_KEY: "ab5c5c7b3427ebfe3ba33caa46c0ccd3a9a92e5589bbb5a1bd6c457a9591cf464aeb428c40836de75a58f172c6c0e47d"
+      CRON_SECRET: "139ba2c8cc08de90acfba045a0420979022d113359ffea7eed25f21081e32693c8e74fa49493660c6020e21a92bef3bc"
+      ADMIN_PASSWORD: "ea98276354345f643158b814993d60398b61ac6046fcc4be"
       AUTH_DISABLED: "false"
       NEXT_PUBLIC_AUTH_DISABLED: "false"
       NEXT_PUBLIC_APP_NAME: "RelayScope"
